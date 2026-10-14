@@ -9,6 +9,10 @@ function mock(path: string) {
   if (path.endsWith('/balances')) return { ...mockBalances, pnlNgn: '12500.00', pnlUsd: '7.89', pnlSince: new Date(Date.now() - 3 * 864e5).toISOString() };
   if (path.endsWith('/activity')) return { items: mockActivity };
   if (path.endsWith('/approvals')) return { items: mockApprovals };
+  if (path.endsWith('/limits')) {
+    const e = (n: number) => (BigInt(n) * 10n ** 18n).toString();
+    return { maxTradeUsd: e(100), maxDailyUsd: e(500), approvalThresholdUsd: e(50), maxSlippageBps: 100, targetNgnBps: 5000 };
+  }
   return null;
 }
 

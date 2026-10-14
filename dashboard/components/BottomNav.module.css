@@ -1,0 +1,6 @@
+.nav { position: fixed; left: 16px; right: 16px; bottom: 16px; z-index: 20; display: flex; justify-content: center; pointer-events: none; }
+.inner { pointer-events: auto; width: 100%; max-width: 488px; background: var(--ink-strong); border-radius: 99px; display: flex; justify-content: space-around; padding: 8px; box-shadow: 0 10px 30px rgba(11, 31, 23, 0.25); }
+.item { color: var(--dark-muted); font-size: 12px; font-weight: 600; padding: 12px 14px; min-height: 44px; border-radius: 99px; position: relative; text-decoration: none; display: inline-flex; align-items: center; }
+.on { background: var(--mint); color: var(--ink-strong); }
+.badge { position: absolute; top: 2px; right: 0; background: var(--badge); color: #fff; font-size: 10px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 99px; display: grid; place-items: center; line-height: 1; }
+@media (min-width: 1000px) { .hideWide { display: none; } }

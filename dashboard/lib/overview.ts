@@ -2,6 +2,7 @@
 import { createPublicClient, formatUnits, http, parseAbi } from 'viem';
 import { celo, celoSepolia } from 'viem/chains';
 import { FACTORY_ADDRESS, factoryAbi } from './vault';
+import type { ApiLimits } from './overviewView';
 import type { ActivityItem, AgentStatus, ApprovalItem, BalancesResponse, Money } from './types';
 
 export const CHAIN = process.env.NEXT_PUBLIC_NETWORK === 'celo' ? celo : celoSepolia;
@@ -73,10 +74,10 @@ export function mergeBalances(
   };
 }
 
-export async function getJson<T>(path: string): Promise<{ ok: boolean; status: number; data: T | null }> {
+export async function getJson<T>(path: string): Promise<{ ok: boolean; status: number; data: T | null; mock: boolean }> {
   const r = await fetch(`/api/agent/${path}`, { cache: 'no-store' });
   const data = (await r.json().catch(() => null)) as T | null;
-  return { ok: r.ok, status: r.status, data };
+  return { ok: r.ok, status: r.status, data, mock: r.headers.get('x-nairaguard-mock') === '1' };
 }
 
 export type OverviewData = {
@@ -84,19 +85,22 @@ export type OverviewData = {
   activity: ActivityItem[];
   approvals: ApprovalItem[];
   agent: AgentStatus | null;
+  limits: ApiLimits | null;
   apiDown: boolean;
 };
 
 export async function loadOverview(vault: `0x${string}`): Promise<OverviewData> {
   const v = vault.toLowerCase();
-  const [chain, bal, act, appr, agent, lim] = await Promise.all([
+  const [chainRaw, bal, act, appr, agent, lim] = await Promise.all([
     FACTORY_ADDRESS ? readVaultBalances(vault).catch(() => null) : Promise.resolve(null),
     getJson<ApiBalances>(`vault/${v}/balances`).catch(() => null),
     getJson<{ items: ActivityItem[] }>(`vault/${v}/activity`).catch(() => null),
     getJson<{ items: ApprovalItem[] }>(`vault/${v}/approvals`).catch(() => null),
     getJson<AgentStatus>('agent').catch(() => null),
-    getJson<{ targetNgnBps: number }>(`vault/${v}/limits`).catch(() => null),
+    getJson<ApiLimits>(`vault/${v}/limits`).catch(() => null),
   ]);
+  // Dev mock mode (AGENT_API_URL unset locally): use the mock balances instead of chain reads.
+  const chain = bal?.mock ? null : chainRaw;
   // 404 unknown_vault / 503 no_rate_yet = new vault the agent hasn't quoted yet: not an error.
   const apiBal = bal?.ok ? bal.data : null;
   const apiDown = !agent?.ok;
@@ -108,6 +112,7 @@ export async function loadOverview(vault: `0x${string}`): Promise<OverviewData> 
     activity: act?.ok ? act.data?.items ?? [] : [],
     approvals: appr?.ok ? appr.data?.items ?? [] : [],
     agent: agent?.ok ? agent.data : null,
+    limits: lim?.ok ? lim.data : null,
     apiDown,
   };
 }

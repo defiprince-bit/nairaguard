@@ -9,9 +9,9 @@ import { sendApproveSwap } from '../lib/approve';
 import { getJson } from '../lib/overview';
 import type { ApprovalItem } from '../lib/types';
 
-const dismissedKey = (vault: string) => `ng:rejected:${vault.toLowerCase()}`;
+export const dismissedKey = (vault: string) => `ng:rejected:${vault.toLowerCase()}`;
 
-function friendly(e: unknown): string {
+export function friendly(e: unknown): string {
   const err = e as { code?: number; shortMessage?: string; message?: string; name?: string };
   if (err.code === 4001 || err.name === 'UserRejectedRequestError' || /reject|denied/i.test(err.message ?? '')) {
     return 'You cancelled in your wallet. Nothing was traded.';

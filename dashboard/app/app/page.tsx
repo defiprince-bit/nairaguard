@@ -5,5 +5,13 @@ import { VaultGate } from '../../components/VaultGate';
 import { WalletGate } from '../../components/WalletGate';
 
 export default function AppHome() {
-  return <WalletGate>{(address) => <VaultGate owner={address}>{(vault) => <Overview vault={vault} />}</VaultGate>}</WalletGate>;
+  return (
+    <WalletGate bare>
+      {(address, miniPay) => (
+        <VaultGate owner={address}>
+          {(vault) => <Overview vault={vault} owner={address as `0x${string}`} miniPay={miniPay} />}
+        </VaultGate>
+      )}
+    </WalletGate>
+  );
 }
