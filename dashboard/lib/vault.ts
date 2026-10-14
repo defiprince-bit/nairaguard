@@ -41,17 +41,17 @@ export const DEFAULT_PRESET: PresetId = 'balanced';
 export const PRESETS: Record<PresetId, { label: string; blurb: string; limits: Omit<Limits, 'targetNgnBps'> }> = {
   careful: {
     label: 'Careful',
-    blurb: 'Up to $20 a trade and $50 a day. Asks you before any trade over $5.',
+    blurb: 'Up to $20 a trade · $50 a day · asks you above $5',
     limits: { maxTradeUsd: usd(20), maxDailyUsd: usd(50), approvalThresholdUsd: usd(5), maxSlippageBps: 50 },
   },
   balanced: {
     label: 'Balanced',
-    blurb: 'Up to $50 a trade and $150 a day. Asks you before any trade over $25.',
+    blurb: 'Up to $50 a trade · $150 a day · asks you above $25',
     limits: { maxTradeUsd: usd(50), maxDailyUsd: usd(150), approvalThresholdUsd: usd(25), maxSlippageBps: 100 },
   },
   active: {
     label: 'Active',
-    blurb: 'Up to $200 a trade and $500 a day. Asks you before any trade over $100.',
+    blurb: 'Up to $200 a trade · $500 a day · asks you above $100',
     limits: { maxTradeUsd: usd(200), maxDailyUsd: usd(500), approvalThresholdUsd: usd(100), maxSlippageBps: 100 },
   },
 };
