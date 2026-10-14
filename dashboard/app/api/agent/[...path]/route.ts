@@ -1,0 +1,32 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { mockActivity, mockAgent, mockApprovals, mockBalances } from '../../../../lib/mock';
+
+/** Read-only proxy to the agent API (AGENT_API_URL). Only /agent and /vault/<addr>/<balances|activity|approvals|limits>. */
+const ALLOWED = /^(agent|vault\/0x[0-9a-fA-F]{40}\/(balances|activity|approvals|limits))$/;
+
+function mock(path: string) {
+  if (path === 'agent') return mockAgent;
+  if (path.endsWith('/balances')) return { ...mockBalances, pnlNgn: '12500.00', pnlUsd: '7.89', pnlSince: new Date(Date.now() - 3 * 864e5).toISOString() };
+  if (path.endsWith('/activity')) return { items: mockActivity };
+  if (path.endsWith('/approvals')) return { items: mockApprovals };
+  return null;
+}
+
+export async function GET(_req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
+  const path = (await ctx.params).path.join('/');
+  if (!ALLOWED.test(path)) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+  const upstream = process.env.AGENT_API_URL;
+  if (!upstream) {
+    // Dev fallback only: mock data when nothing is configured locally.
+    if (process.env.NODE_ENV !== 'production') {
+      return NextResponse.json(mock(path), { headers: { 'x-nairaguard-mock': '1' } });
+    }
+    return NextResponse.json({ error: 'api_not_configured' }, { status: 503 });
+  }
+  try {
+    const r = await fetch(`${upstream.replace(/\/+$/, '')}/api/${path}`, { cache: 'no-store' });
+    return new NextResponse(await r.text(), { status: r.status, headers: { 'content-type': 'application/json' } });
+  } catch {
+    return NextResponse.json({ error: 'upstream_unreachable' }, { status: 502 });
+  }
+}

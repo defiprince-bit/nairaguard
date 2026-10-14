@@ -7,7 +7,8 @@ import { BottomNav } from './BottomNav';
 import { ErrorBanner } from './ErrorBanner';
 import { Skeleton } from './Skeleton';
 import { TradeRow } from './TradeRow';
-import type { ActivityItem, AgentStatus, ApprovalItem, BalancesResponse } from '../lib/types';
+import type { ActivityItem, AgentStatus, ApprovalItem } from '../lib/types';
+import { loadOverview, type OverviewBalances, type Pnl } from '../lib/overview';
 
 function agentLine(agent: AgentStatus | null) {
   if (!agent) return null;
@@ -26,8 +27,35 @@ function agentLine(agent: AgentStatus | null) {
   };
 }
 
-export function Overview() {
-  const [balances, setBalances] = useState<BalancesResponse | null>(null);
+function PnlCard({ pnl }: { pnl: Pnl }) {
+  const ngn = Number(pnl.pnlNgn);
+  const usd = Number(pnl.pnlUsd);
+  const up = ngn >= 0;
+  const since = new Date(pnl.pnlSince).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  return (
+    <div
+      style={{
+        padding: 14,
+        borderRadius: 'var(--radius-card)',
+        border: '1px solid var(--border)',
+        background: 'var(--surface)',
+      }}
+    >
+      <p className="small" style={{ margin: '0 0 4px', color: 'var(--ink-muted)' }}>
+        Saved vs holding naira · since {since}
+      </p>
+      <p style={{ margin: 0, fontWeight: 700, fontSize: 20, color: up ? 'var(--brand)' : 'var(--danger)' }}>
+        {up ? '+' : '−'}₦{Math.abs(ngn).toLocaleString('en-NG', { maximumFractionDigits: 0 })}
+        <span className="small" style={{ marginLeft: 8, color: 'var(--ink-muted)', fontWeight: 500 }}>
+          ({up ? '+' : '−'}${Math.abs(usd).toLocaleString('en-US', { maximumFractionDigits: 2 })})
+        </span>
+      </p>
+    </div>
+  );
+}
+
+export function Overview({ vault }: { vault: `0x${string}` }) {
+  const [balances, setBalances] = useState<OverviewBalances | null>(null);
   const [activity, setActivity] = useState<ActivityItem[] | null>(null);
   const [approvals, setApprovals] = useState<ApprovalItem[] | null>(null);
   const [agent, setAgent] = useState<AgentStatus | null>(null);
@@ -38,16 +66,12 @@ export function Overview() {
     setLoading(true);
     setError(null);
     try {
-      const [b, a, p, g] = await Promise.all([
-        fetch('/api/mock/balances').then((r) => r.json()),
-        fetch('/api/mock/activity').then((r) => r.json()),
-        fetch('/api/mock/approvals').then((r) => r.json()),
-        fetch('/api/mock/agent').then((r) => r.json()),
-      ]);
-      setBalances(b);
-      setActivity(a.items);
-      setApprovals(p.items);
-      setAgent(g);
+      const d = await loadOverview(vault);
+      setBalances(d.balances);
+      setActivity(d.activity);
+      setApprovals(d.approvals);
+      setAgent(d.agent);
+      if (d.apiDown) setError('Agent status is unavailable right now. Balances are read from the chain.');
     } catch {
       setError('Could not load your vault. Try again.');
     } finally {
@@ -57,7 +81,8 @@ export function Overview() {
 
   useEffect(() => {
     load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vault]);
 
   const status = agentLine(agent);
   const pending = approvals?.length ?? 0;
@@ -77,6 +102,17 @@ export function Overview() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {balances ? <BalanceCard data={balances} /> : null}
+            {balances && !balances.rateKnown ? (
+              <p className="small" style={{ margin: 0, color: 'var(--ink-muted)' }}>
+                Waiting for the agent&apos;s first rate check to value your vault.
+              </p>
+            ) : null}
+            {balances && balances.balances.every((b) => b.amount === '0') ? (
+              <p className="small" style={{ margin: 0, padding: 12, borderRadius: 'var(--radius-btn)', background: 'var(--brand-soft)', color: 'var(--ink)' }}>
+                Your vault is empty. Deposit cNGN or USD₮ and the agent will start protecting it.
+              </p>
+            ) : null}
+            {balances?.pnl ? <PnlCard pnl={balances.pnl} /> : null}
 
             {status ? (
               <p
