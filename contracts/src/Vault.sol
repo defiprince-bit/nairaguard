@@ -203,6 +203,7 @@ contract Vault {
 
     /// @notice Owner executes a proposed swap. Reverts if expired or already executed.
     function approve(uint256 id) external onlyOwner returns (uint256 amountOut) {
+        if (paused) revert VaultPaused();
         Approval storage approval = approvals[id];
         if (approval.expiresAt == 0) revert ApprovalNotFound();
         if (approval.executed) revert ApprovalAlreadyExecuted();
@@ -215,8 +216,7 @@ contract Vault {
         _enforceDailyLimit(usdValue);
         _enforceSlippage(approval.tokenIn, approval.tokenOut, approval.amountIn, approval.minOut);
 
-        amountOut =
-            _executeSwap(id, approval.tokenIn, approval.tokenOut, approval.amountIn, approval.minOut, usdValue);
+        amountOut = _executeSwap(id, approval.tokenIn, approval.tokenOut, approval.amountIn, approval.minOut, usdValue);
     }
 
     function _validateSwap(address tokenIn, address tokenOut, uint256 amountIn, uint256 minOut, uint256 usdValue)

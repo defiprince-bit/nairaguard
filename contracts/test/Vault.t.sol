@@ -281,6 +281,34 @@ contract VaultTest is Test {
         vault.proposeSwap(address(cngn), address(usdt), amountIn, minOut, THRESHOLD);
     }
 
+    function test_Approve_RevertPaused() public {
+        _depositBoth(1_000e18);
+        uint256 amountIn = 60e18;
+        uint256 minOut = _minOut(address(cngn), address(usdt), amountIn);
+        vm.prank(agent);
+        uint256 id = vault.proposeSwap(address(cngn), address(usdt), amountIn, minOut, THRESHOLD);
+        vault.pause();
+        vm.expectRevert(Vault.VaultPaused.selector);
+        vault.approve(id);
+    }
+
+    function test_Approve_RevertDailyLimit() public {
+        _depositBoth(100_000e18);
+        uint256 amountIn = MAX_TRADE;
+        uint256 minOut = _minOut(address(cngn), address(usdt), amountIn);
+        uint256 n = MAX_DAILY / MAX_TRADE + 1;
+        uint256[] memory ids = new uint256[](n);
+        for (uint256 i; i < n; i++) {
+            vm.prank(agent);
+            ids[i] = vault.proposeSwap(address(cngn), address(usdt), amountIn, minOut, MAX_TRADE);
+        }
+        for (uint256 i; i < n - 1; i++) {
+            vault.approve(ids[i]);
+        }
+        vm.expectRevert(Vault.DailyLimitExceeded.selector);
+        vault.approve(ids[n - 1]);
+    }
+
     // ── pause / unpause ──────────────────────────────────────────────────
 
     function test_PauseAndUnpause() public {
@@ -326,13 +354,7 @@ contract VaultTest is Test {
         vm.prank(stranger);
         vm.expectRevert(Vault.NotOwner.selector);
         vault.setLimits(
-            Vault.Limits({
-                maxTradeUsd: 1,
-                maxDailyUsd: 1,
-                approvalThresholdUsd: 1,
-                maxSlippageBps: 1,
-                targetNgnBps: 1
-            })
+            Vault.Limits({maxTradeUsd: 1, maxDailyUsd: 1, approvalThresholdUsd: 1, maxSlippageBps: 1, targetNgnBps: 1})
         );
     }
 
