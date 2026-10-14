@@ -127,9 +127,10 @@ describe('excluded_wallets migration', () => {
     const db = new PGlite() as unknown as Db;
     await migrate(db);
     const { rows } = await db.query<{ address: string; reason: string }>('SELECT address, reason FROM excluded_wallets ORDER BY address');
-    expect(rows).toHaveLength(4);
+    expect(rows).toHaveLength(5);
     expect(rows.find((r) => r.address === DEPLOYER)?.reason).toBe('team');
     expect(rows.find((r) => r.address === AGENT)?.reason).toBe('team');
+    expect(rows.find((r) => r.address === '0x6cac3a6ab6981419f175713b80846c57528311f6')?.reason).toBe('team');
     await expect(db.query(`INSERT INTO excluded_wallets (address, reason) VALUES ($1,'friend')`, [a(1)])).rejects.toThrow();
     await expect(db.query(`INSERT INTO excluded_wallets (address, reason) VALUES ('0xABC','test')`)).rejects.toThrow();
   });
