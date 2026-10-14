@@ -34,5 +34,15 @@ describe('createVault reverts', () => {
   it('maps VaultExists (0x4239717c)', async () => {
     const { classifyError, MSG_VAULT_EXISTS } = await import('./errors');
     expect(classifyError({ message: 'execution reverted', data: '0x4239717c' }).message).toBe(MSG_VAULT_EXISTS);
+    expect(MSG_VAULT_EXISTS).toBe('You already have a vault. Taking you to deposit…');
+  });
+  it('VaultExists and timeout are neutral create outcomes', async () => {
+    const { classifyCreateError, MSG_TIMEOUT } = await import('./errors');
+    expect(classifyCreateError({ data: '0x4239717c' }).kind).toBe('exists');
+    expect(classifyCreateError(new Error('Timed out waiting for confirmation'))).toEqual({
+      kind: 'pending', message: "Still confirming on the network. This can take a minute, so we'll keep checking.",
+    });
+    expect(MSG_TIMEOUT).toContain('keep checking');
+    expect(classifyCreateError({ code: 4001 }).kind).toBe('cancelled');
   });
 });
