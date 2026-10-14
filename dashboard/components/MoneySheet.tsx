@@ -2,7 +2,8 @@
 
 import { ReactNode, useState } from 'react';
 import { Button } from './Button';
-import { ErrorBanner } from './ErrorBanner';
+import { InlineMessage } from './InlineMessage';
+import { type FriendlyError, friendlyError } from '../lib/errors';
 import { DepositStep } from './CreateVault';
 import { sendWithdraw } from '../lib/withdraw';
 import s from './Overview.module.css';
@@ -33,7 +34,7 @@ export function WithdrawSheet(p: { owner: `0x${string}`; factory: `0x${string}`;
   const [token, setToken] = useState<'cngn' | 'usdt'>('cngn');
   const [amount, setAmount] = useState('');
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<FriendlyError | null>(null);
   async function go() {
     setBusy(true);
     setError(null);
@@ -41,8 +42,7 @@ export function WithdrawSheet(p: { owner: `0x${string}`; factory: `0x${string}`;
       await sendWithdraw(p.owner, p.factory, p.vault, token, amount.trim());
       p.onDone();
     } catch (e) {
-      const err = e as { code?: number; message?: string };
-      setError(err.code === 4001 ? 'You cancelled in your wallet.' : err.message || 'Withdrawal failed.');
+      setError(friendlyError(e));
     } finally {
       setBusy(false);
     }
@@ -56,7 +56,7 @@ export function WithdrawSheet(p: { owner: `0x${string}`; factory: `0x${string}`;
         </div>
         <label className={s.lbl} htmlFor="wd-amt">Amount</label>
         <input id="wd-amt" inputMode="decimal" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className={s.input} />
-        {error ? <ErrorBanner message={error} onRetry={() => setError(null)} /> : null}
+        {error ? <InlineMessage err={error} onDismiss={() => setError(null)} /> : null}
         <Button fullWidth onClick={go} disabled={busy || !amount}>{busy ? 'Waiting for wallet…' : 'Withdraw'}</Button>
       </div>
     </Sheet>

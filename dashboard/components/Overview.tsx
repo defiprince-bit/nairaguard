@@ -7,7 +7,7 @@ import { BottomNav, NAV_ITEMS } from './BottomNav';
 import { ErrorBanner } from './ErrorBanner';
 import { Skeleton } from './Skeleton';
 import { DepositSheet, WithdrawSheet } from './MoneySheet';
-import { friendly } from './ApprovalsList';
+import { friendlyTx } from './ApprovalsList';
 import s from './Overview.module.css';
 import { REJECT_HELPER, sendApproveSwap, sendRejectSwap } from '../lib/approve';
 import { approvalRate, noRate, tokenUnits, formatCountdown, lastCheck, msLeft, tradeOut, txUrl } from '../lib/format';
@@ -58,7 +58,7 @@ function Eye({ hidden }: { hidden: boolean }) {
 
 function ApprovalBanner({ item, owner, vault, onDone }: { item: ApprovalItem; owner: `0x${string}`; vault: `0x${string}`; onDone: () => void }) {
   const [now, setNow] = useState(() => Date.now());
-  const [state, setState] = useState<'idle' | 'waiting' | 'rejecting' | 'ok' | 'rejected' | 'error'>('idle');
+  const [state, setState] = useState<'idle' | 'waiting' | 'rejecting' | 'ok' | 'rejected' | 'error' | 'cancelled'>('idle');
   const [msg, setMsg] = useState<string | null>(null);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
   const left = msLeft(item.expiresAt, now);
@@ -71,12 +71,12 @@ function ApprovalBanner({ item, owner, vault, onDone }: { item: ApprovalItem; ow
   async function approve() {
     setState('waiting'); setMsg(null);
     try { await sendApproveSwap(owner, vault, BigInt(item.id)); setState('ok'); setTimeout(onDone, 1500); }
-    catch (e) { setState('error'); setMsg(friendly(e)); }
+    catch (e) { const f = friendlyTx(e); setState(f.kind); setMsg(f.message); }
   }
   async function reject() {
     setState('rejecting'); setMsg(null);
     try { await sendRejectSwap(owner, vault, BigInt(item.id)); setState('rejected'); setTimeout(onDone, 6000); }
-    catch (e) { setState('error'); setMsg(friendly(e)); }
+    catch (e) { const f = friendlyTx(e); setState(f.kind); setMsg(f.message); }
   }
   const busy = state === 'waiting' || state === 'rejecting';
   const final = state === 'ok' || state === 'rejected';
@@ -86,7 +86,7 @@ function ApprovalBanner({ item, owner, vault, onDone }: { item: ApprovalItem; ow
         <div className={s.lbl}>Needs your OK · {what}</div>
         <div className={s.cd} aria-live="polite">{expired ? 'Expired' : formatCountdown(left)}</div>
         <div className={s.lbl} style={{ fontSize: 12 }}>
-          {state === 'ok' ? 'Approved ✓' : state === 'rejected' ? `You rejected this. ${REJECT_HELPER}` : state === 'error' ? msg : rate === null ? 'Rate unavailable · Auto-cancels if you don\u2019t answer' : 'Auto-cancels if you don\u2019t answer'}
+          {state === 'ok' ? 'Approved ✓' : state === 'rejected' ? `You rejected this. ${REJECT_HELPER}` : state === 'error' ? <span role="alert" style={{ color: 'var(--danger)' }}>{msg}</span> : state === 'cancelled' ? <span role="status">{msg}</span> : rate === null ? 'Rate unavailable · Auto-cancels if you don\u2019t answer' : 'Auto-cancels if you don\u2019t answer'}
         </div>
       </div>
       <div className={s.apBtns}>

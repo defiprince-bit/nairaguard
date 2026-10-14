@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { parseUnits } from 'viem';
 import { Button } from './Button';
-import { ErrorBanner } from './ErrorBanner';
+import { InlineMessage } from './InlineMessage';
+import { type FriendlyError, friendlyError } from '../lib/errors';
 import {
   DEFAULT_PRESET, PRESETS, type PresetId, buildApprove, buildCreateVault, buildDeposit, factoryTokens, lookupVault,
   presetLimits, sendTx, waitForReceipt,
@@ -26,11 +27,11 @@ export function CreateVaultStep({
   const [preset, setPreset] = useState<PresetId>(DEFAULT_PRESET);
   const [target, setTarget] = useState(50);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<FriendlyError | null>(null);
 
   async function create() {
     const eth = window.ethereum;
-    if (!eth) return setError('No wallet found.');
+    if (!eth) return setError({ kind: 'error', message: 'No wallet found.' });
     setBusy(true);
     setError(null);
     try {
@@ -39,7 +40,7 @@ export function CreateVaultStep({
       if (!v) throw new Error('Vault not found after creation.');
       onCreated(v);
     } catch (e) {
-      setError((e as Error).message || 'Could not create your vault.');
+      setError(friendlyError(e));
     } finally {
       setBusy(false);
     }
@@ -69,13 +70,13 @@ export function CreateVaultStep({
       <div role="radiogroup" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {(Object.keys(PRESETS) as PresetId[]).map((id) => (
           <Button key={id} variant={preset === id ? 'primary' : 'secondary'} fullWidth onClick={() => setPreset(id)}
-            aria-checked={preset === id} role="radio" style={{ textAlign: 'left', flexDirection: 'column', alignItems: 'flex-start' }}>
-            <strong>{PRESETS[id].label}</strong>
-            <span className="small">{PRESETS[id].blurb}</span>
+            aria-checked={preset === id} role="radio" style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+            <strong style={{ display: 'block', fontWeight: 700 }}>{PRESETS[id].label}</strong>
+            <span className="small" style={{ display: 'block', fontSize: 13, fontWeight: 400, color: preset === id ? 'rgba(255,255,255,0.8)' : 'var(--ink-muted)' }}>{PRESETS[id].blurb}</span>
           </Button>
         ))}
       </div>
-      {error ? <ErrorBanner message={error} onRetry={() => setError(null)} /> : null}
+      {error ? <InlineMessage err={error} onDismiss={() => setError(null)} /> : null}
       <Button fullWidth onClick={create} disabled={busy}>{busy ? 'Creating…' : 'Create my vault'}</Button>
       <Button variant="ghost" fullWidth onClick={() => setStage('target')} disabled={busy}>Back</Button>
     </div>
@@ -89,18 +90,18 @@ export function DepositStep({
   const [token, setToken] = useState<'cngn' | 'usdt'>('cngn');
   const [amount, setAmount] = useState('');
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<FriendlyError | null>(null);
 
   async function deposit() {
     const eth = window.ethereum;
-    if (!eth) return setError('No wallet found.');
+    if (!eth) return setError({ kind: 'error', message: 'No wallet found.' });
     let units: bigint;
     try {
       units = parseUnits(amount || '0', 18);
     } catch {
-      return setError('Enter a valid amount.');
+      return setError({ kind: 'error', message: 'Enter a valid amount.' });
     }
-    if (units <= 0n) return setError('Enter an amount above zero.');
+    if (units <= 0n) return setError({ kind: 'error', message: 'Enter an amount above zero.' });
     setBusy(true);
     setError(null);
     try {
@@ -110,7 +111,7 @@ export function DepositStep({
       await sendAndWait(eth, owner, buildDeposit(vault, addr, units));
       onDone();
     } catch (e) {
-      setError((e as Error).message || 'Deposit failed.');
+      setError(friendlyError(e));
     } finally {
       setBusy(false);
     }
@@ -125,7 +126,7 @@ export function DepositStep({
       </div>
       <input inputMode="decimal" placeholder="Amount" value={amount} onChange={(e) => setAmount(e.target.value)}
         style={{ padding: 12, borderRadius: 12, border: '1px solid var(--border)', fontSize: 16 }} />
-      {error ? <ErrorBanner message={error} onRetry={() => setError(null)} /> : null}
+      {error ? <InlineMessage err={error} onDismiss={() => setError(null)} /> : null}
       <Button fullWidth onClick={deposit} disabled={busy}>{busy ? 'Depositing…' : 'Deposit'}</Button>
       <Button variant="ghost" fullWidth onClick={onDone}>Skip for now</Button>
     </div>

@@ -62,6 +62,6 @@ describe('risk presets', () => {
     expect(PRESETS.careful.limits).toEqual({ maxTradeUsd: e18(20), maxDailyUsd: e18(50), approvalThresholdUsd: e18(5), maxSlippageBps: 50 });
     expect(PRESETS.balanced.limits).toEqual({ maxTradeUsd: e18(50), maxDailyUsd: e18(150), approvalThresholdUsd: e18(25), maxSlippageBps: 100 });
     expect(PRESETS.active.limits).toEqual({ maxTradeUsd: e18(200), maxDailyUsd: e18(500), approvalThresholdUsd: e18(100), maxSlippageBps: 100 });
-    expect(PRESETS.balanced.blurb).toContain('Asks you before any trade over $25.');
+    expect(PRESETS.balanced.blurb).toBe('Up to $50 a trade · $150 a day · asks you above $25');
   });
 });

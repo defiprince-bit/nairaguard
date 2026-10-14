@@ -8,19 +8,22 @@ import { Skeleton } from './Skeleton';
 import { sendApproveSwap, sendRejectSwap } from '../lib/approve';
 import { getJson } from '../lib/overview';
 import type { ApprovalItem } from '../lib/types';
+import { type FriendlyError, MSG_GENERIC, friendlyError } from '../lib/errors';
 
-export function friendly(e: unknown): string {
-  const err = e as { code?: number; shortMessage?: string; message?: string; name?: string };
-  if (err.code === 4001 || err.name === 'UserRejectedRequestError' || /reject|denied/i.test(err.message ?? '')) {
-    return 'You cancelled in your wallet. Nothing was traded.';
-  }
-  const msg = err.shortMessage ?? err.message ?? '';
-  if (/ApprovalRejected/.test(msg)) return 'You already rejected this trade.';
-  if (/ApprovalExpired/.test(msg)) return 'This approval expired before it went through.';
-  if (/DailyLimitExceeded/.test(msg)) return 'This would go over your daily limit, so it was not sent.';
-  if (/TradeTooLarge/.test(msg)) return 'This is above your per-trade limit, so it was not sent.';
-  return 'The approval failed. Nothing was traded. Try again in a moment.';
+/** Approval-specific mapping on top of the shared friendlyError (which logs the raw error). */
+export function friendlyTx(e: unknown): FriendlyError {
+  const base = friendlyError(e);
+  if (base.kind === 'cancelled' || base.message !== MSG_GENERIC) return base;
+  const err = e as { shortMessage?: string; message?: string };
+  const msg = `${err?.shortMessage ?? ''} ${err?.message ?? ''}`;
+  if (/ApprovalRejected/.test(msg)) return { kind: 'error', message: 'You already rejected this trade.' };
+  if (/ApprovalExpired/.test(msg)) return { kind: 'error', message: 'This approval expired before it went through.' };
+  if (/DailyLimitExceeded/.test(msg)) return { kind: 'error', message: 'This would go over your daily limit, so it was not sent.' };
+  if (/TradeTooLarge/.test(msg)) return { kind: 'error', message: 'This is above your per-trade limit, so it was not sent.' };
+  return base;
 }
+
+const toTx = (f: FriendlyError): TxState => (f.kind === 'cancelled' ? { kind: 'cancelled', message: f.message } : { kind: 'error', message: f.message });
 
 export function ApprovalsList({ owner, vault, onCount }: { owner: `0x${string}`; vault: `0x${string}`; onCount?: (n: number) => void }) {
   const [items, setItems] = useState<ApprovalItem[] | null>(null);
@@ -54,7 +57,7 @@ export function ApprovalsList({ owner, vault, onCount }: { owner: `0x${string}`;
       const hash = await sendApproveSwap(owner, vault, BigInt(item.id));
       setTx((t) => ({ ...t, [item.id]: { kind: 'ok', hash } }));
     } catch (e) {
-      setTx((t) => ({ ...t, [item.id]: { kind: 'error', message: friendly(e) } }));
+      setTx((t) => ({ ...t, [item.id]: toTx(friendlyTx(e)) }));
     }
   }
 
@@ -64,7 +67,7 @@ export function ApprovalsList({ owner, vault, onCount }: { owner: `0x${string}`;
       const hash = await sendRejectSwap(owner, vault, BigInt(item.id));
       setTx((t) => ({ ...t, [item.id]: { kind: 'rejected', hash } }));
     } catch (e) {
-      setTx((t) => ({ ...t, [item.id]: { kind: 'error', message: friendly(e) } }));
+      setTx((t) => ({ ...t, [item.id]: toTx(friendlyTx(e)) }));
     }
   }
 

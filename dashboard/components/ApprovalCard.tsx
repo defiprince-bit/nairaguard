@@ -13,7 +13,8 @@ export type TxState =
   | { kind: 'waiting'; action: 'approve' | 'reject' }
   | { kind: 'ok'; hash: string }
   | { kind: 'rejected'; hash: string }
-  | { kind: 'error'; message: string };
+  | { kind: 'error'; message: string }
+  | { kind: 'cancelled'; message: string };
 
 function Amount({ m, rate }: { m: Money; rate: number | null }) {
   if (rate === null) {
@@ -98,6 +99,9 @@ export function ApprovalCard({
           Approved ✓ ·{' '}
           <a href={txUrl(tx.hash)} target="_blank" rel="noreferrer">View on explorer ↗</a>
         </p>
+      ) : null}
+      {tx.kind === 'cancelled' ? (
+        <p role="status" className="small" style={{ margin: 0, color: 'var(--ink-muted)' }}>{tx.message}</p>
       ) : null}
       {tx.kind === 'error' ? (
         <p role="alert" className="small" style={{ margin: 0, color: 'var(--danger)' }}>{tx.message}</p>
