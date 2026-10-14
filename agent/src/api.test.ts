@@ -293,6 +293,7 @@ describe('waitlist (SIWE)', () => {
 
   it('normalises sources', () => {
     expect(normaliseSource('minipay')).toBe('minipay');
+    expect(normaliseSource('valora')).toBe('valora');
     expect(normaliseSource(undefined)).toBe('direct');
   });
 });

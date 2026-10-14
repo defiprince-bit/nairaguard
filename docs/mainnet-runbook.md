@@ -45,10 +45,11 @@ Set **before** triggering the production deploy, for the Production environment:
 
 - `NEXT_PUBLIC_NETWORK=celo`
 - `NEXT_PUBLIC_FACTORY_ADDRESS=<mainnet factory>`
-- the agent API URL pointing at `agent-mainnet`
+- `AGENT_API_URL=<agent-mainnet Railway URL>`
 
 `NEXT_PUBLIC_*` values are baked in at build time; changing them afterwards needs a redeploy. Without them the app keeps
-pointing at Sepolia and labels every trade "Test swap".
+pointing at Sepolia and labels every trade "Test swap". Without `AGENT_API_URL` the dashboard shows Sepolia data
+(activity, balances, approvals) from the wrong agent.
 
 ## 3. Order of operations
 

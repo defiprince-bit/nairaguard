@@ -9,7 +9,7 @@ import { computePnl, getBaseline } from './pnl.js';
 import { STATS_DEFAULT_CHAIN_ID } from './config.js';
 
 /** design.md §4 source allowlist. */
-export const WAITLIST_SOURCES = new Set(['x', 'celo-ng', 'celo-africa-dao', 'minipay', 'whatsapp-freelancers', 'referral']);
+export const WAITLIST_SOURCES = new Set(['x', 'celo-ng', 'celo-africa-dao', 'minipay', 'whatsapp-freelancers', 'referral', 'valora']);
 export const normaliseSource = (s: string | null | undefined) => (s && WAITLIST_SOURCES.has(s) ? s : 'direct');
 
 export const hashToken = (t: string) => createHash('sha256').update(t).digest('hex');
