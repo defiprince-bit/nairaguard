@@ -1,0 +1,35 @@
+name: Deploy contracts
+
+on:
+  workflow_dispatch:
+    inputs:
+      network:
+        description: Target network
+        required: true
+        type: choice
+        options: [alfajores, celo]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # celo mainnet requires manual approval via the `mainnet` environment
+    environment: ${{ inputs.network == 'celo' && 'mainnet' || 'alfajores' }}
+    defaults:
+      run:
+        working-directory: contracts
+    env:
+      DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+      AGENT_ADDRESS: ${{ vars.AGENT_ADDRESS }}
+      ALFAJORES_RPC_URL: ${{ vars.ALFAJORES_RPC_URL || 'https://alfajores-forno.celo-testnet.org' }}
+      CELO_RPC_URL: ${{ vars.CELO_RPC_URL || 'https://forno.celo.org' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: forge test
+      - name: Deploy (${{ inputs.network }})
+        run: forge script script/Deploy.s.sol:Deploy --rpc-url ${{ inputs.network }} --broadcast
