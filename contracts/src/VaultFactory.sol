@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {Vault} from "./Vault.sol";
+import {Vault, IVaultFactory} from "./Vault.sol";
 
 /// @dev Minimal EIP-1167 clone deployer (same bytecode as OpenZeppelin `Clones.clone`).
 library Clones {
@@ -31,16 +31,34 @@ contract VaultFactory {
     address public textileRouter;
 
     mapping(address router => bool) public isRouter;
+    /// @notice Allowlisted (target, spender) venue pairs for `Vault.swapViaRfq`, keyed on
+    ///         keccak256(abi.encode(target, spender)). New venues (e.g. a DEX) need no vault redeploy.
+    mapping(bytes32 pairKey => bool) public isVenuePair;
+    /// @notice Label per pair, e.g. "textile".
+    mapping(bytes32 pairKey => string) public venuePairLabel;
+    /// @notice Label of the most recently allowlisted pair for a target. The API maps `Swapped.target` → venue with it.
+    mapping(address target => string) public venueLabelOf;
+
+    uint16 public constant MAX_DEVIATION_CAP_BPS = 1_000; // 10%
+    /// @notice How long the agent has to execute an approved proposal.
+    uint64 public approvalWindow = 30 minutes;
+    IVaultFactory.OracleConfig internal _oracle;
     mapping(address owner => address vault) public vaultOf;
     address[] public allVaults;
 
     error NotOwner();
     error ZeroAddress();
     error VaultExists();
+    error InvalidParam();
 
     event VaultCreated(address indexed owner, address indexed vault);
     event AgentUpdated(address indexed agent);
     event RouterUpdated(address indexed router, bool allowed);
+    event VenueUpdated(address indexed target, address indexed spender, bool allowed, string label);
+    event PriceFeedUpdated(address indexed feed);
+    event OracleParamsUpdated(uint16 maxDeviationBps, uint32 maxFeedAge);
+    event FallbackRateUpdated(bool enabled, uint256 rate, uint8 decimals, uint32 maxAge);
+    event ApprovalWindowUpdated(uint64 window);
     event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
@@ -58,6 +76,8 @@ contract VaultFactory {
         cNGN = _cNGN;
         usdt = _usdt;
         owner = msg.sender;
+        _oracle.maxDeviationBps = 300; // 3%
+        _oracle.maxFeedAge = 1 hours;
         emit OwnershipTransferred(address(0), msg.sender);
     }
 
@@ -90,6 +110,62 @@ contract VaultFactory {
             textileRouter = address(0);
         }
         emit RouterUpdated(router, allowed);
+    }
+
+    function venueKey(address target, address spender) public pure returns (bytes32) {
+        return keccak256(abi.encode(target, spender));
+    }
+
+    function isAllowedVenue(address target, address spender) external view returns (bool) {
+        return isVenuePair[venueKey(target, spender)];
+    }
+
+    /// @notice Allowlist (or remove) a (target, spender) pair, e.g. (reactor, reactor). Never add Permit2.
+    function setVenue(address target, address spender, bool allowed, string calldata label) external onlyOwner {
+        if (target == address(0) || spender == address(0)) revert ZeroAddress();
+        if (allowed && bytes(label).length == 0) revert InvalidParam();
+        bytes32 key = venueKey(target, spender);
+        isVenuePair[key] = allowed;
+        venuePairLabel[key] = label;
+        if (allowed) venueLabelOf[target] = label;
+        emit VenueUpdated(target, spender, allowed, label);
+    }
+
+    /// @notice Chainlink NGN/USD feed (Celo mainnet: 0xc17cbe2db40e53f4984c46f608da6da1ff074c11).
+    function setPriceFeed(address feed) external onlyOwner {
+        if (feed == address(0)) revert ZeroAddress();
+        _oracle.feed = feed;
+        emit PriceFeedUpdated(feed);
+    }
+
+    /// @notice One-sided rate floor (bps below the reference, capped at 10%) and feed staleness bound.
+    function setOracleParams(uint16 maxDeviationBps, uint32 maxFeedAge) external onlyOwner {
+        if (maxDeviationBps > MAX_DEVIATION_CAP_BPS || maxFeedAge == 0) revert InvalidParam();
+        _oracle.maxDeviationBps = maxDeviationBps;
+        _oracle.maxFeedAge = maxFeedAge;
+        emit OracleParamsUpdated(maxDeviationBps, maxFeedAge);
+    }
+
+    /// @notice Owner-only manual reference rate (USD per NGN, `decimals` places) for when the feed is dead.
+    ///         While enabled it replaces the feed; it goes stale `maxAge` seconds after being set.
+    function setFallbackRate(bool enabled, uint256 rate, uint8 decimals, uint32 maxAge) external onlyOwner {
+        if (enabled && (rate == 0 || maxAge == 0 || decimals > 36)) revert InvalidParam();
+        _oracle.fallbackEnabled = enabled;
+        _oracle.fallbackRate = rate;
+        _oracle.fallbackDecimals = decimals;
+        _oracle.fallbackMaxAge = maxAge;
+        _oracle.fallbackSetAt = uint64(block.timestamp);
+        emit FallbackRateUpdated(enabled, rate, decimals, maxAge);
+    }
+
+    function setApprovalWindow(uint64 window) external onlyOwner {
+        if (window == 0 || window > 1 days) revert InvalidParam();
+        approvalWindow = window;
+        emit ApprovalWindowUpdated(window);
+    }
+
+    function oracleConfig() external view returns (IVaultFactory.OracleConfig memory) {
+        return _oracle;
     }
 
     function transferOwnership(address newOwner) external onlyOwner {
