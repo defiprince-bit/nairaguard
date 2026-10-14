@@ -97,7 +97,11 @@ Writes (approve, set limits, deposit, withdraw) are **signed by the user's walle
 - HTTPS only (Vercel previews per PR).
 
 ## 6. ERC-8004 and attribution
-- Agent wallet: `0xa2a173a481bc063fee0ef11c67fc756dc5f928f4`. Register its ERC-8004 identity from that wallet once funded (mainnet). **TBD**: registry address and call, from Hackathon bud.
+Source: [Celo ERC-8004 docs](https://docs.celo.org/build/agents/8004).
+- Agent wallet: `0xa2a173a481bc063fee0ef11c67fc756dc5f928f4`. It registers, so it owns the identity (hard to undo). Use only this wallet.
+- Identity Registry (mainnet 42220): `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432`. Reputation Registry: `0x8004BAa17C55a88189AE136b182e5fdA19dE9b63`.
+- Call `register(string agentURI)` from the agent wallet **through the tx builder** (tagged). It mints an ERC-721 to the sender and emits `Registered(agentId, agentURI, owner)`. Store `agentId` in config and add it to the card.
+- `agentURI` = `https://<dashboard>/.well-known/agent.json` with `type`, `name`, `description`, `image`, `endpoints` (dashboard URL, `wallet` with chainId 42220). Card must be live before registering.
 - Show the identity on the dashboard via `/api/agent`.
 
 ## Build order (one Cursor task at a time)
