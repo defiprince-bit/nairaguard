@@ -1,0 +1,16 @@
+{{first_line}}
+
+DEPOSITS ARE OPEN
+
+NairaGuard is live. Your savings no longer have to ride every naira swing.
+Deposit once and our agent balances cNGN and USDT for you on Celo.
+
+Open NairaGuard: {{cta_url}}
+
+- You keep control of your vault
+- The agent asks before big trades
+- Withdraw anytime
+
+--
+You're getting this because you joined the NairaGuard waitlist.
+Unsubscribe: {{unsubscribe_url}}
