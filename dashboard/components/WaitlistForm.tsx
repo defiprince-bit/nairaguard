@@ -44,7 +44,7 @@ export function WaitlistForm() {
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [signupId, setSignupId] = useState<string | null>(null);
+  const [signupToken, setSignupToken] = useState<string | null>(null);
   const [verifyState, setVerifyState] = useState<'idle' | 'signing' | 'verified' | 'skipped' | 'failed'>('idle');
 
   useEffect(() => {
@@ -86,7 +86,7 @@ export function WaitlistForm() {
           source,
         }),
       });
-      const data = (await res.json()) as { ok?: boolean; error?: string; id?: string };
+      const data = (await res.json()) as { ok?: boolean; error?: string; signupToken?: string };
       if (!res.ok || !data.ok) {
         const msg: Record<string, string> = {
           consent_required: 'Please agree before joining.',
@@ -97,7 +97,7 @@ export function WaitlistForm() {
         setError(msg[data.error ?? ''] ?? 'Something went wrong. Try again.');
         return;
       }
-      setSignupId(data.id ?? null);
+      setSignupToken(data.signupToken ?? null);
       setDone(true);
     } catch {
       setError('Network error. Try again.');
@@ -109,7 +109,7 @@ export function WaitlistForm() {
   /** Optional step after joining: prove the MiniPay wallet is theirs (SIWE). Cancelling keeps them on the list, unverified. */
   async function verifyWallet() {
     const eth = typeof window !== 'undefined' ? window.ethereum : undefined;
-    if (!eth || !wallet || !signupId) return;
+    if (!eth || !wallet || !signupToken) return;
     setVerifyState('signing');
     try {
       const n = await fetch(`/api/waitlist/nonce?address=${wallet}`, { cache: 'no-store' });
@@ -119,7 +119,7 @@ export function WaitlistForm() {
       const v = await fetch('/api/waitlist/verify', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ id: signupId, message, signature }),
+        body: JSON.stringify({ signupToken, message, signature }),
       });
       const vd = (await v.json()) as { ok?: boolean };
       setVerifyState(v.ok && vd.ok ? 'verified' : 'failed');
@@ -159,7 +159,7 @@ export function WaitlistForm() {
         <p className="small" style={{ margin: 0, color: 'var(--ink-muted)' }}>
           We&apos;ll ping you when NairaGuard opens inside MiniPay.
         </p>
-        {isMiniPay && wallet && signupId && verifyState !== 'verified' ? (
+        {isMiniPay && wallet && signupToken && verifyState !== 'verified' ? (
           <div
             style={{
               padding: 14,
