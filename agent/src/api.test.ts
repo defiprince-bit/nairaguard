@@ -195,6 +195,23 @@ describe('waitlist (SIWE)', () => {
     expect(await post(message)).toMatchObject({ status: 200, body: { verified: true } });
   });
 
+  it('logs waitlist requests as JSON with address only (no contact)', async () => {
+    const a = api();
+    const lines: string[] = [];
+    const orig = console.log;
+    console.log = (m: string) => { lines.push(m); };
+    try {
+      const t = await join(a, { ...base, wallet: acc.address });
+      await a.handle({ method: 'POST', url: '/api/waitlist/verify', body: { signupToken: t, ...(await signed(a)) } });
+      await a.handle({ method: 'POST', url: '/api/waitlist/verify', body: {} });
+    } finally { console.log = orig; }
+    const evts = lines.map((l) => JSON.parse(l));
+    expect(evts.map((e) => [e.path, e.status])).toEqual([['/api/waitlist', 200], ['/api/waitlist/nonce', 200], ['/api/waitlist/verify', 200], ['/api/waitlist/verify', 400]]);
+    expect(evts[2].address).toBe(acc.address.toLowerCase());
+    expect(evts[3].error).toBe('signup_token_required');
+    expect(lines.join('')).not.toContain('ada@example.com');
+  });
+
   it('normalises sources', () => {
     expect(normaliseSource('minipay')).toBe('minipay');
     expect(normaliseSource(undefined)).toBe('direct');
