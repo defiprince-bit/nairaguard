@@ -113,7 +113,7 @@ Text contrast is at least 4.5:1. Never use colour alone for status, so chips car
 - **Wrong network**: a warn-soft card "Your wallet is on a different network. NairaGuard runs on Celo." with a **Switch to Celo** pill (`wallet_switchEthereumChain`, adding the chain on 4902). The chain follows `NEXT_PUBLIC_NETWORK` (Celo / Celo Sepolia).
 - **Header menu** (avatar on Overview, address chip elsewhere): wallet address + name, **Switch wallet** (reopens the sheet), **Disconnect**. The last wallet is remembered and restored silently.
 - **Waitlist**: wallet optional; a secondary pill "Connect wallet" fills the wallet field. After joining with a connected non-MiniPay wallet, the "Confirm my wallet" SIWE step shows (button: "Check your wallet…" while signing).
-- **Deposit**: hint "You'll need a little CELO or USDC for network fees." above the amount.
+- **Deposit**: when the wallet's cNGN and USD₮ balances are both zero — inside MiniPay, a dark pill "Top up in MiniPay" linking to `https://link.minipay.xyz/add_cash?tokens=USDT` (same tab); elsewhere, a quiet note "You'll need some USD₮ on Celo first." (bento tokens, never error styling). When the wallet has funds and is outside MiniPay, keep the fee hint "You'll need a little CELO or USDC for network fees."
 - **Attribution**: every write (createVault, approve, deposit, withdraw, approve/reject swap) goes through `lib/sendTagged.ts`, which re-applies `celo_9efd0f97b491` via `toDataSuffix`, whatever the connector.
 
 Screenshots: `nairaguard-brand/mockups/built-connect-mobile.png`, `built-connect-desktop.png`.

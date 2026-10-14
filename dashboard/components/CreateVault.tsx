@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { parseUnits } from 'viem';
 import { Button } from './Button';
 import { InlineMessage } from './InlineMessage';
@@ -12,6 +12,7 @@ import {
 } from '../lib/vault';
 import { sendTagged } from '../lib/sendTagged';
 import { getProvider, isMiniPay } from '../lib/wallet';
+import { MINIPAY_ADD_CASH_USDT, readWalletDepositBalances, walletNeedsTopUp } from '../lib/depositFunds';
 
 type Eth = NonNullable<ReturnType<typeof getProvider>>;
 
@@ -128,6 +129,16 @@ export function DepositStep({
   const [amount, setAmount] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<FriendlyError | null>(null);
+  const [needsTopUp, setNeedsTopUp] = useState(false);
+  const miniPay = isMiniPay();
+
+  useEffect(() => {
+    let alive = true;
+    readWalletDepositBalances(owner, factory)
+      .then((b) => { if (alive) setNeedsTopUp(walletNeedsTopUp(b.cngn, b.usdt)); })
+      .catch(() => { if (alive) setNeedsTopUp(false); });
+    return () => { alive = false; };
+  }, [owner, factory]);
 
   async function deposit() {
     const eth = getProvider();
@@ -154,6 +165,13 @@ export function DepositStep({
     }
   }
 
+  const pill: CSSProperties = {
+    display: 'inline-flex', alignItems: 'center', alignSelf: 'flex-start',
+    padding: '12px 20px', minHeight: 44, borderRadius: 99, fontWeight: 600, fontSize: 14,
+    background: 'var(--ink-strong)', color: '#fff', border: '1.5px solid var(--ink-strong)',
+    textDecoration: 'none',
+  };
+
   return (
     <div style={{ maxWidth: 480, margin: '0 auto', padding: '24px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
       <h1 className="h1" style={{ margin: 0 }}>Make your first deposit</h1>
@@ -161,7 +179,13 @@ export function DepositStep({
         <Button variant={token === 'cngn' ? 'primary' : 'secondary'} onClick={() => setToken('cngn')}>cNGN</Button>
         <Button variant={token === 'usdt' ? 'primary' : 'secondary'} onClick={() => setToken('usdt')}>USD₮</Button>
       </div>
-      {!isMiniPay() ? (
+      {needsTopUp && miniPay ? (
+        <a href={MINIPAY_ADD_CASH_USDT} style={pill}>Top up in MiniPay</a>
+      ) : null}
+      {needsTopUp && !miniPay ? (
+        <p className="small" style={{ margin: 0, color: 'var(--ink-muted)' }}>You&apos;ll need some USD₮ on Celo first.</p>
+      ) : null}
+      {!needsTopUp && !miniPay ? (
         <p className="small" style={{ margin: 0, color: 'var(--ink-muted)' }}>You&apos;ll need a little CELO or USDC for network fees.</p>
       ) : null}
       <input inputMode="decimal" placeholder="Amount" value={amount} onChange={(e) => setAmount(e.target.value)}

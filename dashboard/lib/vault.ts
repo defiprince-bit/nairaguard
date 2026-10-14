@@ -106,11 +106,6 @@ export async function lookupVault(factory: `0x${string}`, owner: `0x${string}`):
   return decodeVaultOf((r.data ?? '0x') as Hex);
 }
 
-/** Send a tagged tx from the connected wallet (MiniPay: legacy tx, no EIP-1559 fields needed). */
-export async function sendTx(eth: Eth, from: `0x${string}`, tx: Tx): Promise<Hex> {
-  return (await eth.request({ method: 'eth_sendTransaction', params: [{ from, to: tx.to, data: tx.data }] })) as Hex;
-}
-
 /**
  * Polls the receipt over the app's own RPC, not the wallet's: MiniPay's read provider can be on a
  * different chain than the one it signs for, so it never returns (or errors on) the Sepolia receipt.
