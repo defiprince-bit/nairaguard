@@ -35,9 +35,9 @@ contract Deploy is Script {
         vault = new Vault(agent, address(cngn), address(usdt));
 
         MockSwapRouter router = new MockSwapRouter();
-        // Approx NGN per USD notionals for quoting (1e18 scale): 1500 cNGN ≈ 1 USDT.
-        router.setRate(address(cngn), 1e18);
-        router.setRate(address(usdt), 1500e18);
+        // quote(in,out) = amountIn * rate[out] / rate[in]  →  1 USDT = 1500 cNGN.
+        router.setRate(address(cngn), 1500e18);
+        router.setRate(address(usdt), 1e18);
 
         // Seed router inventory for test swaps.
         cngn.mint(address(router), 10_000_000e18);

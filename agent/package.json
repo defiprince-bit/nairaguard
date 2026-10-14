@@ -14,10 +14,13 @@
   },
   "dependencies": {
     "@celo/attribution-tags": "^0.5.0",
+    "pg": "^8.23.1",
     "viem": "^2.21.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.9",
     "@types/node": "^22.10.0",
+    "@types/pg": "^8.23.1",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
     "vitest": "^2"
