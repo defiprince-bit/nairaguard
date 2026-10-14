@@ -65,7 +65,10 @@ export function WalletGate({ children }: { children: (address: string, miniPay: 
           alignItems: 'center',
         }}
       >
-        <strong style={{ color: 'var(--brand)' }}>NairaGuard</strong>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <img src="/logo.svg" alt="" width={28} height={28} style={{ borderRadius: 8 }} />
+          <strong style={{ color: 'var(--brand)' }}>NairaGuard</strong>
+        </span>
         <span className="small" style={{ color: 'var(--ink-muted)' }}>
           {miniPay ? 'MiniPay · ' : ''}
           {shorten(address)}

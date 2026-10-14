@@ -15,7 +15,11 @@ export default function Home() {
         minWidth: 320,
       }}
     >
-      <p className="small" style={{ margin: '0 0 12px', color: 'var(--brand)', fontWeight: 700 }}>
+      <p
+        className="small"
+        style={{ margin: '0 0 12px', color: 'var(--brand)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}
+      >
+        <img src="/logo.svg" alt="" width={28} height={28} style={{ borderRadius: 8 }} />
         NairaGuard
       </p>
       <h1 className="h1" style={{ margin: '0 0 12px' }}>
