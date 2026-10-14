@@ -1,11 +1,8 @@
 import { AmountText } from './AmountText';
 import { StatusChip } from './StatusChip';
 import type { ActivityItem } from '../lib/types';
+import { tradeOut, txUrl } from '../lib/format';
 
-const EXPLORER =
-  process.env.NEXT_PUBLIC_NETWORK === 'celo'
-    ? 'https://celoscan.io'
-    : 'https://celo-sepolia.blockscout.com';
 
 function mapStatus(s: ActivityItem['status']): 'pending' | 'executed' | 'failed' {
   if (s === 'confirmed') return 'executed';
@@ -31,7 +28,8 @@ function timeLabel(iso: string) {
 }
 
 export function TradeRow({ item }: { item: ActivityItem }) {
-  const celoscan = `${EXPLORER}/tx/${item.txHash}`;
+  const celoscan = txUrl(item.txHash);
+  const out = tradeOut(item);
   return (
     <a
       href={celoscan}
@@ -53,7 +51,7 @@ export function TradeRow({ item }: { item: ActivityItem }) {
         </strong>
         <StatusChip status={mapStatus(item.status)} />
       </div>
-      {item.in && item.out ? (
+      {item.in && out ? (
         <div style={{ display: 'flex', gap: 16, marginBottom: 6 }}>
           <AmountText
             amountNgn={Number(item.in.amountNgn)}
@@ -63,11 +61,16 @@ export function TradeRow({ item }: { item: ActivityItem }) {
           <span className="small" style={{ color: 'var(--ink-muted)', alignSelf: 'center' }}>
             →
           </span>
-          <AmountText
-            amountNgn={Number(item.out.amountNgn)}
-            amountUsd={Number(item.out.amountUsd)}
-            size="small"
-          />
+          <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4 }}>
+            {out.atLeast ? (
+              <span className="small" style={{ color: 'var(--ink-muted)' }}>at least</span>
+            ) : null}
+            <AmountText
+              amountNgn={Number(out.money.amountNgn)}
+              amountUsd={Number(out.money.amountUsd)}
+              size="small"
+            />
+          </span>
         </div>
       ) : item.in ? (
         <div style={{ marginBottom: 6 }}>
@@ -82,7 +85,7 @@ export function TradeRow({ item }: { item: ActivityItem }) {
         {item.reason}
       </p>
       <p className="small" style={{ margin: 0, color: 'var(--ink-muted)' }}>
-        {timeLabel(item.at)}
+        {timeLabel(item.at)} · <span style={{ textDecoration: 'underline' }}>View on explorer ↗</span>
       </p>
     </a>
   );

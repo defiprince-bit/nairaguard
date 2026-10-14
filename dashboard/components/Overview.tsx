@@ -8,13 +8,15 @@ import { ErrorBanner } from './ErrorBanner';
 import { Skeleton } from './Skeleton';
 import { TradeRow } from './TradeRow';
 import type { ActivityItem, AgentStatus, ApprovalItem } from '../lib/types';
+import { lastCheck } from '../lib/format';
 import { loadOverview, type OverviewBalances, type Pnl } from '../lib/overview';
 
-function agentLine(agent: AgentStatus | null) {
-  if (!agent) return null;
-  if (!agent.lastRunAt) return { text: 'Agent not run yet', warn: true };
-  const mins = Math.round((Date.now() - new Date(agent.lastRunAt).getTime()) / 60_000);
-  const stale = mins > 15 || !agent.healthy;
+function agentLine(agent: AgentStatus | null, vaultCheckedAt?: string | null) {
+  if (!agent && !vaultCheckedAt) return null;
+  const last = lastCheck(vaultCheckedAt ?? agent?.lastCheckedAt, agent?.lastRunAt);
+  if (!last) return { text: 'Agent not run yet', warn: true };
+  const mins = Math.round((Date.now() - new Date(last).getTime()) / 60_000);
+  const stale = mins > 15 || (agent ? !agent.healthy : false);
   if (stale) {
     return {
       text: `Agent quiet · last check ${mins} min ago`,
@@ -84,7 +86,7 @@ export function Overview({ vault }: { vault: `0x${string}` }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vault]);
 
-  const status = agentLine(agent);
+  const status = agentLine(agent, balances?.lastCheckedAt);
   const pending = approvals?.length ?? 0;
 
   return (

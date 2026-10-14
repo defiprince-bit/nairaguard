@@ -8,7 +8,7 @@ export const CHAIN = process.env.NEXT_PUBLIC_NETWORK === 'celo' ? celo : celoSep
 const erc20 = parseAbi(['function balanceOf(address) view returns (uint256)', 'function decimals() view returns (uint8)']);
 
 export type Pnl = { pnlNgn: string; pnlUsd: string; pnlSince: string };
-export type OverviewBalances = BalancesResponse & { pnl: Pnl | null; rateKnown: boolean };
+export type OverviewBalances = BalancesResponse & { pnl: Pnl | null; rateKnown: boolean; lastCheckedAt?: string | null };
 
 const makeClient = () => createPublicClient({ chain: CHAIN, transport: http() });
 let client: ReturnType<typeof makeClient> | undefined;
@@ -32,7 +32,7 @@ export async function readVaultBalances(vault: `0x${string}`) {
   return { cngn: n, usdt: u };
 }
 
-type ApiBalances = Partial<BalancesResponse> & { pnlNgn?: string | null; pnlUsd?: string | null; pnlSince?: string | null; balances?: Money[] };
+type ApiBalances = Partial<BalancesResponse> & { lastCheckedAt?: string | null; pnlNgn?: string | null; pnlUsd?: string | null; pnlSince?: string | null; balances?: Money[] };
 
 /** P&L is shown only when the API returns it with a baseline date (pnlSince); otherwise hidden. */
 export function pickPnl(b: ApiBalances | null | undefined): Pnl | null {
@@ -69,10 +69,11 @@ export function mergeBalances(
     targetNgnBps: targetNgnBps ?? api?.targetNgnBps ?? 5000,
     pnl: pickPnl(api),
     rateKnown: rate > 0,
+    lastCheckedAt: api?.lastCheckedAt ?? null,
   };
 }
 
-async function getJson<T>(path: string): Promise<{ ok: boolean; status: number; data: T | null }> {
+export async function getJson<T>(path: string): Promise<{ ok: boolean; status: number; data: T | null }> {
   const r = await fetch(`/api/agent/${path}`, { cache: 'no-store' });
   const data = (await r.json().catch(() => null)) as T | null;
   return { ok: r.ok, status: r.status, data };
