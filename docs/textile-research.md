@@ -113,3 +113,68 @@ Both usable sources are a single Chainlink feed underneath. The Mento copy adds 
 - read the decimals from the feed.
 
 This feed is the NGN FX reference, not the cNGN market price. Textile quoted ≈ ₦1,361/$ against an oracle rate of ≈ ₦1,330, which is about a 2.3% gap. Before setting the band, measure the cNGN premium over a few days. The band may need to be about 3%, or one-sided, because the floor only has to stop prices that are too low. Keep an agent-pushed rate only as a fallback the owner can switch on if the feed goes stale.
+
+## Permit2, the taker side and Textile's Operator Vault (checked 2026-10-14)
+
+Sources: the [address book](https://fx-docs.textilecredit.com/protocol/address-book.html), [Settlement](https://fx-docs.textilecredit.com/protocol/settlement.html), [Operator Vault](https://fx-docs.textilecredit.com/protocol/operator-vault/), [For aggregators](https://fx-docs.textilecredit.com/api/v2/aggregators.html), [Authentication](https://fx-docs.textilecredit.com/api/v2/authentication.html) and [Testnet](https://fx-docs.textilecredit.com/testnet.html). Verified source comes from celo.blockscout.com, and the reads were made with `cast` against forno.celo.org and sepolia.base.org. Nothing was signed or sent.
+
+### 1. Who uses Permit2: the maker, not us
+
+`LimitOrderReactor` `0xa9AA…35b3` is verified (solc 0.8.30) and is vendored UniswapX v2.1.0. `permit2()` returns `0x000000000022D473030F116dDEE9F6B43aC78BA3`, and `feeController()` returns `0x7b00…3Ea7`.
+
+In UniswapX the **swapper** is the party that signs the order. On Textile that is the **maker** (a market maker's wallet or an Operator Vault). The **taker**, which is us, is the reactor's `msg.sender`, which UniswapX calls the "filler".
+
+- The maker's input is pulled with **Permit2 SignatureTransfer**:
+  ```solidity
+  // LimitOrderReactor.sol
+  function _transferInputTokens(ResolvedOrder memory order, address to) internal override {
+      permit2.permitWitnessTransferFrom(order.toPermit(), order.transferDetails(to),
+          order.info.swapper, order.hash, ...
+  // BaseReactor._prepare
+  order.validate(msg.sender);
+  _transferInputTokens(order, msg.sender);   // maker's tokens go to the taker
+  ```
+- The taker's side (the order's outputs) is a **plain ERC-20 `transferFrom` from `msg.sender`**:
+  ```solidity
+  // BaseReactor._fill -> CurrencyLibrary.transferFill
+  // else the caller must have approved the token for the fill
+  ERC20(currency).safeTransferFrom(msg.sender, recipient, amount);
+  ```
+- The aggregators doc says the same: "pulls the taker's side from msg.sender with a plain transferFrom. There are no callbacks, no Permit2 on the taker side, and no EOA or tx.origin checks." The spender is `quote.spender`. That is the reactor for most quotes, or the `VaultOrderExecutor` when the order is from a vault. Read it from each quote.
+- Permit2's own source (verified on Celo) handles EIP-1271 in `SignatureVerification.verify`: `if (claimedSigner.code.length == 0) { ecrecover … } else { IERC1271(claimedSigner).isValidSignature(hash, signature) … }`. A contract **swapper** is supported, and that is how Textile's Operator Vaults sign. We are never the swapper, though, so we don't need it.
+
+**What this means for 8b:** NairaGuard sells by acting as the **taker**. The vault does a plain `approve(quote.spender, takerPays)`, calls `transactions.swap.to` with `transactions.swap.data`, resets the allowance to 0, and checks the balance changes. No Permit2 approval is needed, and no EIP-1271 for settlement. The output arrives at `msg.sender`, which is the vault. The spender allowlist has two entries: the reactor and the VaultOrderExecutor. Permit2 is not one of them.
+
+### 2. Textile's Operator Vault and VaultOrderExecutor
+
+- `OperatorVaultFactory` `0x8810…844A` and `VaultOrderExecutor` `0x01b0…42e2` are both verified. The executor's `reactor()` is the Celo reactor, and its `factory()` is that factory.
+- An Operator Vault is a **maker-side LP vault**. LPs deposit, and an operator's Stitch bot quotes with the vault's inventory. The vault is the **swapper** and signs through EIP-1271 (`OperatorVault.isValidSignature`). Every order needs **two signatures on the same digest**: the strategy signer (the bot) and the risk signer. Other roles are operator admin, risk admin (which rotates the risk signer after a delay) and guardian (pause). The vault's policy checks the pair, a single output whose recipient is the vault, size caps, expiry and epoch.
+- `VaultOrderExecutor.fill(signedOrder)` is a stateless **taker-side** wrapper for filling *against* a vault order. It:
+  - checks that `factory.isVault(swapper)`, that the reactor matches and that there is one output;
+  - checks that `msg.sender` is in the order's `preferredFillers` (`_assertCallerMayFill`);
+  - calls `prepareSettlement` to recall idle funds from Aave;
+  - pulls the output plus the fee from `msg.sender` with `safeTransferFrom`, then `forceApprove(reactor)` and `reactor.execute`;
+  - resets the approval to 0;
+  - forwards the received input token and any leftover to `msg.sender`.
+- Example mainnet fill: [`0x5f2e9dcf…5bb2`](https://celo.blockscout.com/tx/0x5f2e9dcf4bdecc745707aeb0d25653c5cc43a1ccbf9bc496f1959c6e71be5bb2) (2026-10-05 03:03 WAT). The taker EOA `0x1a25…aA0` called `fill` itself and paid 65,000,000 IDRX. The vault `0xEac3…` received 64,993,500.65 IDRX and the fee controller got 6,499.35 IDRX (1 bps). The taker received 3,649.385 USDT, part of it recalled from aCelUSDT.
+- **Fit with NairaGuard:**
+  - We can't use an Operator Vault as our vault. It is an LP market-making product with two-key signing and epoch-based redemptions, not a per-user vault run by an agent with spending limits.
+  - We don't have to "be the swapper through the executor" either, because we are the taker. When a quote is filled by a Textile vault, `quote.spender` and `transactions.swap.to` are the executor, and our vault calls it the same way it calls the reactor (approve spender, call, reset, check deltas).
+  - Because of the preferred-filler check, our **vault address must be the `taker`** in the RFQ request, so the quote binds to it.
+- **Attribution:** the agent's own EOA sends `NairaGuardVault.swapViaTextile(...)` with the `celo_9efd0f97b491` tag. The vault calls the reactor or executor in the same transaction. No order is signed by us and no filler submits on our behalf.
+
+### 3. Base Sepolia sandbox
+
+- The reactor `0x3a6e…e4D9` has code, and its `permit2()` returns the canonical Permit2.
+- The tokens match the address book. `0xe238…afa2` is `cNGN` with 6 decimals, and `0x036C…CF7e` is `USDC` with 6 decimals.
+- **Right now the RFQ API can't quote cNGN↔USDC there.** `/v2/rfq/preview` on 84532 returns `Corridor cngn-usdc-base-sepolia is not RFQ-enabled — use the /v1 book`. `/v2/rfq/levels?chainId=84532` lists only ZARU (`0x47b0…`) ↔ USDC. Celo Sepolia (11142220) returns `has no FX settlement contract deployed`. Celo mainnet `/levels` lists cNGN `0x62b8…` ↔ USDT `0x4806…` with **zero depth** at the time of the check.
+- **Keys:** a firm request without a key works only with `takerProof`, a TakerControl signature by the taker. Our keyless test returned `401 proof_of_control_required`. For a contract taker that proof is checked with EIP-1271, so a keyless vault would need `isValidSignature` just to request quotes. Regular keys also check that the taker already holds the sell token. The cleaner route is a **partner key with the `rfq:aggregator` scope**, which skips both checks and allows 32 live quotes. These keys are issued by hand, so the owner needs to ask Textile for one.
+
+### Recommendation
+
+Go with **option (a), approve then call**, and correct one point: the approval goes to `quote.spender` (the reactor or the VaultOrderExecutor), not to Permit2.
+- No Permit2 `approve` and no `isValidSignature` are needed for settlement.
+- Both possible spenders and swap targets go on the factory allowlist.
+- Request quotes with `taker = vault`, using an aggregator key.
+
+We could add a narrow EIP-1271 later, signing only TakerControl digests the agent commits to, if we have to stay keyless. Option (c) isn't a fit, because the executor is just one more allowlisted spender inside (a). A dress rehearsal on Base Sepolia waits until Textile enables the cNGN↔USDC RFQ corridor there.
