@@ -10,7 +10,10 @@ export const ATTRIBUTION_TAG = 'celo_9efd0f97b491' as const;
 export const ATTRIBUTION_SUFFIX: Hex = toDataSuffix(ATTRIBUTION_TAG);
 
 export const ZERO = '0x0000000000000000000000000000000000000000' as const;
-export const FACTORY_ADDRESS = (process.env.NEXT_PUBLIC_FACTORY_ADDRESS ?? '') as `0x${string}` | '';
+/** Celo Sepolia VaultFactory; override with NEXT_PUBLIC_FACTORY_ADDRESS (required for mainnet). */
+export const SEPOLIA_FACTORY = '0x4fa967c761eD1ddB642Fe62Fcb9aB7B924Df5310' as const;
+export const FACTORY_ADDRESS = (process.env.NEXT_PUBLIC_FACTORY_ADDRESS ||
+  (process.env.NEXT_PUBLIC_NETWORK === 'celo' ? '' : SEPOLIA_FACTORY)) as `0x${string}` | '';
 
 export const factoryAbi = parseAbi([
   'function createVault((uint256 maxTradeUsd, uint256 maxDailyUsd, uint256 approvalThresholdUsd, uint16 maxSlippageBps, uint16 targetNgnBps) limits) returns (address)',
