@@ -1,0 +1,32 @@
+# deps
+node_modules/
+.pnpm-store/
+# env & secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.keystore
+keystore/
+keys/
+secrets/
+mnemonic*
+# foundry
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+broadcast/
+out/
+cache/
+contracts/lib/
+# node builds
+dist/
+.next/
+next-env.d.ts
+*.tsbuildinfo
+coverage/
+# misc
+.DS_Store
+*.log
+.vercel

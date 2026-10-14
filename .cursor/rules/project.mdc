@@ -1,0 +1,12 @@
+---
+description: NairaGuard project rules
+alwaysApply: true
+---
+
+# NairaGuard rules for Cursor
+
+- Follow the build order in `docs/design.md`, **one task at a time**. Finish and verify a task before starting the next. Don't jump ahead to mainnet work.
+- **Never commit secrets.** This repo is public. No private keys, mnemonics, RPC keys or `.env` files. Use `.env.example` with empty values; real values live in GitHub secrets / local `.env` only.
+- **Every transaction goes through the shared tx builder**, which appends the attribution tag `ATTRIBUTION_TAG` from `agent/src/config.ts` (`celo_9efd0f97b491`). Never call `sendTransaction`/`writeContract` directly elsewhere.
+- Layout: `contracts/` (Foundry), `agent/` (Node 22 + TypeScript + viem), `dashboard/` (Next.js, mobile-first, must run inside MiniPay).
+- **Run tests before finishing a task**: `cd contracts && forge test`, and `pnpm typecheck && pnpm lint && pnpm build` at the root. Fix failures; don't skip or delete tests.
