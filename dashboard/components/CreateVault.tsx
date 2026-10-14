@@ -5,7 +5,7 @@ import { parseUnits } from 'viem';
 import { Button } from './Button';
 import { ErrorBanner } from './ErrorBanner';
 import {
-  PRESETS, type PresetId, buildApprove, buildCreateVault, buildDeposit, factoryTokens, lookupVault,
+  DEFAULT_PRESET, PRESETS, type PresetId, buildApprove, buildCreateVault, buildDeposit, factoryTokens, lookupVault,
   presetLimits, sendTx, waitForReceipt,
 } from '../lib/vault';
 
@@ -22,7 +22,8 @@ async function sendAndWait(eth: Eth, from: `0x${string}`, tx: Parameters<typeof 
 export function CreateVaultStep({
   owner, factory, onCreated,
 }: { owner: `0x${string}`; factory: `0x${string}`; onCreated: (vault: `0x${string}`) => void }) {
-  const [preset, setPreset] = useState<PresetId>('balanced');
+  const [stage, setStage] = useState<'target' | 'freedom'>('target');
+  const [preset, setPreset] = useState<PresetId>(DEFAULT_PRESET);
   const [target, setTarget] = useState(50);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,26 +45,39 @@ export function CreateVaultStep({
     }
   }
 
+  const wrap = { maxWidth: 480, margin: '0 auto', padding: '24px 16px', display: 'flex', flexDirection: 'column', gap: 16 } as const;
+
+  if (stage === 'target') {
+    return (
+      <div style={wrap}>
+        <h1 className="h1" style={{ margin: 0 }}>Create my vault</h1>
+        <p style={{ margin: 0, color: 'var(--ink-muted)' }}>
+          Your own vault. Only you can withdraw, and the agent can only trade within your limits.
+        </p>
+        <label className="small" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          How much do you want to keep in naira? {target}% cNGN / {100 - target}% USD₮
+          <input type="range" min={0} max={100} step={5} value={target} onChange={(e) => setTarget(Number(e.target.value))} />
+        </label>
+        <Button fullWidth onClick={() => setStage('freedom')}>Next</Button>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ maxWidth: 480, margin: '0 auto', padding: '24px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <h1 className="h1" style={{ margin: 0 }}>Create my vault</h1>
-      <p style={{ margin: 0, color: 'var(--ink-muted)' }}>
-        Your own vault. Only you can withdraw, and the agent can only trade within your limits.
-      </p>
+    <div style={wrap}>
+      <h1 className="h1" style={{ margin: 0 }}>How much freedom should the agent have?</h1>
       <div role="radiogroup" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {(Object.keys(PRESETS) as PresetId[]).map((id) => (
           <Button key={id} variant={preset === id ? 'primary' : 'secondary'} fullWidth onClick={() => setPreset(id)}
-            aria-checked={preset === id} role="radio">
-            {PRESETS[id].label} · {PRESETS[id].blurb}
+            aria-checked={preset === id} role="radio" style={{ textAlign: 'left', flexDirection: 'column', alignItems: 'flex-start' }}>
+            <strong>{PRESETS[id].label}</strong>
+            <span className="small">{PRESETS[id].blurb}</span>
           </Button>
         ))}
       </div>
-      <label className="small" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        Target mix: {target}% cNGN / {100 - target}% USD₮
-        <input type="range" min={0} max={100} step={5} value={target} onChange={(e) => setTarget(Number(e.target.value))} />
-      </label>
       {error ? <ErrorBanner message={error} onRetry={() => setError(null)} /> : null}
       <Button fullWidth onClick={create} disabled={busy}>{busy ? 'Creating…' : 'Create my vault'}</Button>
+      <Button variant="ghost" fullWidth onClick={() => setStage('target')} disabled={busy}>Back</Button>
     </div>
   );
 }

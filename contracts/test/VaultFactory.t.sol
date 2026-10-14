@@ -121,6 +121,33 @@ contract VaultFactoryTest is Test {
         assertEq(usdt.balanceOf(address(v)), 10e18);
     }
 
+    function test_RouterTurnedOffOnFactory_RevertsSwapInExistingClone() public {
+        Vault v = _create(alice);
+        _fund(v, alice, 1_000e18);
+        vm.prank(agent);
+        v.swap(address(cngn), address(usdt), 10e18, 9.9e18, 10e18);
+
+        factory.setRouter(address(router), false);
+        assertEq(factory.textileRouter(), address(0));
+        assertFalse(factory.isRouter(address(router)));
+
+        vm.prank(agent);
+        vm.expectRevert(Vault.RouterNotAllowed.selector);
+        v.swap(address(cngn), address(usdt), 10e18, 9.9e18, 10e18);
+        vm.prank(agent);
+        vm.expectRevert(Vault.RouterNotAllowed.selector);
+        v.proposeSwap(address(cngn), address(usdt), 10e18, 9.9e18, 60e18);
+    }
+
+    function test_SetRouterFalse_OnlyClearsMatchingActiveRouter() public {
+        MockSwapRouter other = new MockSwapRouter();
+        factory.setRouter(address(other), true); // other becomes active, router stays allowlisted
+        factory.setRouter(address(router), false); // not the active one
+        assertEq(factory.textileRouter(), address(other));
+        factory.setRouter(address(other), false);
+        assertEq(factory.textileRouter(), address(0));
+    }
+
     function test_SetRouter_OnlyOwner() public {
         vm.prank(stranger);
         vm.expectRevert(VaultFactory.NotOwner.selector);
