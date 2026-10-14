@@ -14,20 +14,8 @@ const ALLOWED_SOURCES = new Set([
   'referral',
 ]);
 
-type EthProvider = {
-  isMiniPay?: boolean;
-  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
-};
-
-declare global {
-  interface Window {
-    ethereum?: EthProvider;
-  }
-}
-
-function shorten(addr: string) {
-  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
-}
+import { ConnectSheet } from './ConnectSheet';
+import { getProvider, shorten, useWallet } from '../lib/wallet';
 
 export function WaitlistForm() {
   const searchParams = useSearchParams();
@@ -46,6 +34,12 @@ export function WaitlistForm() {
   const [copied, setCopied] = useState(false);
   const [signupToken, setSignupToken] = useState<string | null>(null);
   const [verifyCode, setVerifyCode] = useState<string | null>(null);
+  const [sheet, setSheet] = useState(false);
+  const connected = useWallet();
+  // Outside MiniPay: a wallet connected through the sheet fills the (optional) wallet field.
+  useEffect(() => {
+    if (!isMiniPay && connected.address && !connected.miniPay) setWallet(connected.address);
+  }, [connected.address, connected.miniPay, isMiniPay]);
   const [verifyState, setVerifyState] = useState<'idle' | 'signing' | 'verified' | 'skipped' | 'failed'>('idle');
 
   useEffect(() => {
@@ -109,7 +103,7 @@ export function WaitlistForm() {
 
   /** Optional step after joining: prove the MiniPay wallet is theirs (SIWE). Cancelling keeps them on the list, unverified. */
   async function verifyWallet() {
-    const eth = typeof window !== 'undefined' ? window.ethereum : undefined;
+    const eth = getProvider();
     // Never run nonce/verify inside MiniPay.
     if (!eth || eth.isMiniPay || isMiniPay || !wallet || !signupToken) return;
     setVerifyState('signing');
@@ -200,7 +194,7 @@ export function WaitlistForm() {
           </p>
         )}
         {/* Never show the wallet-confirm (nonce/verify) step inside MiniPay. */}
-        {!isMiniPay && wallet && signupToken && verifyState !== 'verified' ? (
+        {!isMiniPay && !connected.miniPay && wallet && connected.address?.toLowerCase() === wallet.toLowerCase() && signupToken && verifyState !== 'verified' ? (
           <div
             style={{
               padding: 14,
@@ -215,7 +209,7 @@ export function WaitlistForm() {
               Sign to confirm this wallet is yours. It&apos;s free and doesn&apos;t move any money.
             </p>
             <Button fullWidth onClick={verifyWallet} disabled={verifyState === 'signing'}>
-              {verifyState === 'signing' ? 'Waiting for MiniPay…' : 'Confirm my wallet'}
+              {verifyState === 'signing' ? 'Check your wallet…' : 'Confirm my wallet'}
             </Button>
             {verifyState === 'skipped' ? (
               <p className="small" style={{ margin: 0, color: 'var(--ink-muted)' }}>
@@ -299,6 +293,17 @@ export function WaitlistForm() {
             MiniPay · {shorten(wallet)}
           </span>
         ) : null}
+        {!isMiniPay ? (
+          connected.address ? (
+            <span className="small" style={{ color: 'var(--brand)' }}>
+              {connected.label ?? 'Wallet'} · {shorten(connected.address)}
+            </span>
+          ) : (
+            <Button variant="secondary" onClick={() => setSheet(true)} style={{ borderRadius: 999, alignSelf: 'flex-start' }}>
+              Connect wallet
+            </Button>
+          )
+        ) : null}
       </label>
 
       <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
@@ -320,8 +325,9 @@ export function WaitlistForm() {
         {submitting ? 'Joining…' : 'Join the waitlist'}
       </Button>
       <p className="small" style={{ margin: 0, textAlign: 'center', color: 'var(--ink-muted)' }}>
-        Works right inside MiniPay
+        Works right inside MiniPay, or with Valora and MetaMask
       </p>
+      {sheet && !isMiniPay ? <ConnectSheet onClose={() => setSheet(false)} /> : null}
     </form>
   );
 }

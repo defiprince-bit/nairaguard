@@ -8,13 +8,15 @@ import { type FriendlyError, friendlyError } from '../lib/errors';
 import { type CreateResult, recheckCreate, runCreate } from '../lib/createVault';
 import {
   DEFAULT_PRESET, PRESETS, type PresetId, buildApprove, buildCreateVault, buildDeposit, factoryTokens, lookupVault,
-  presetLimits, sendTx, waitForReceipt,
+  presetLimits, type Tx, waitForReceipt,
 } from '../lib/vault';
+import { sendTagged } from '../lib/sendTagged';
+import { getProvider, isMiniPay } from '../lib/wallet';
 
-type Eth = NonNullable<Window['ethereum']>;
+type Eth = NonNullable<ReturnType<typeof getProvider>>;
 
-async function sendAndWait(eth: Eth, from: `0x${string}`, tx: Parameters<typeof sendTx>[2]) {
-  const hash = await sendTx(eth, from, tx);
+async function sendAndWait(eth: Eth, from: `0x${string}`, tx: Tx) {
+  const hash = await sendTagged(eth, from, tx);
   const rc = await waitForReceipt(eth, hash);
   if (rc.status !== '0x1') throw new Error('Transaction failed on-chain.');
   return hash;
@@ -47,7 +49,7 @@ export function CreateVaultStep({
   }
 
   async function checkAgain() {
-    const eth = window.ethereum;
+    const eth = getProvider();
     if (!eth) return;
     setBusy(true);
     try {
@@ -59,14 +61,14 @@ export function CreateVaultStep({
 
   async function create() {
     if (pending) return; // never re-send while the first tx is still confirming
-    const eth = window.ethereum;
+    const eth = getProvider();
     if (!eth) return setError({ kind: 'error', message: 'No wallet found.' });
     setBusy(true);
     setError(null);
     try {
       apply(await runCreate({
         lookup: () => lookupVault(factory, owner),
-        send: () => sendTx(eth, owner, buildCreateVault(factory, presetLimits(preset, target))),
+        send: () => sendTagged(eth, owner, buildCreateVault(factory, presetLimits(preset, target))),
         wait: (h) => waitForReceipt(eth, h),
       }));
     } catch (e) {
@@ -128,7 +130,7 @@ export function DepositStep({
   const [error, setError] = useState<FriendlyError | null>(null);
 
   async function deposit() {
-    const eth = window.ethereum;
+    const eth = getProvider();
     if (!eth) return setError({ kind: 'error', message: 'No wallet found.' });
     if (!(Number(amount) > 0)) return setError({ kind: 'error', message: 'Enter an amount above zero.' });
     setBusy(true);
@@ -159,6 +161,9 @@ export function DepositStep({
         <Button variant={token === 'cngn' ? 'primary' : 'secondary'} onClick={() => setToken('cngn')}>cNGN</Button>
         <Button variant={token === 'usdt' ? 'primary' : 'secondary'} onClick={() => setToken('usdt')}>USD₮</Button>
       </div>
+      {!isMiniPay() ? (
+        <p className="small" style={{ margin: 0, color: 'var(--ink-muted)' }}>You&apos;ll need a little CELO or USDC for network fees.</p>
+      ) : null}
       <input inputMode="decimal" placeholder="Amount" value={amount} onChange={(e) => setAmount(e.target.value)}
         style={{ padding: 12, borderRadius: 12, border: '1px solid var(--border)', fontSize: 16 }} />
       {error ? <InlineMessage err={error} onDismiss={() => setError(null)} /> : null}

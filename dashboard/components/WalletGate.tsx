@@ -1,15 +1,31 @@
 'use client';
 
-import { ReactNode } from 'react';
+import { Fragment, ReactNode, useEffect, useState } from 'react';
 import { Button } from './Button';
 import { ErrorBanner } from './ErrorBanner';
 import { Skeleton } from './Skeleton';
-import { shorten, useWallet } from '../lib/wallet';
+import { ConnectSheet } from './ConnectSheet';
+import { SwitchNetworkBar, WalletMenu } from './WalletMenu';
+import { CHAIN_NAME, shorten, switchToAppChain, useWallet } from '../lib/wallet';
 
 export function WalletGate({ children, bare }: { children: (address: string, miniPay: boolean) => ReactNode; /** Skip the default header (screens with their own top bar). */ bare?: boolean }) {
-  const { address, miniPay, connecting, error, connect, setError } = useWallet();
+  const { address, miniPay, booting, connecting, error, connect, setError, wrongChain } = useWallet();
+  // ?connect=1 opens the sheet straight away (outreach links, demo recording).
+  const [sheet, setSheet] = useState(false);
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('connect') === '1') setSheet(true);
+  }, []);
+  const [switching, setSwitching] = useState(false);
+  const [switchErr, setSwitchErr] = useState<string | null>(null);
 
-  if (connecting && !address) {
+  async function doSwitch() {
+    setSwitching(true);
+    setSwitchErr(null);
+    try { await switchToAppChain(); } catch { setSwitchErr(`Couldn’t switch. Open your wallet and pick ${CHAIN_NAME}.`); }
+    finally { setSwitching(false); }
+  }
+
+  if ((connecting || booting) && !address) {
     return (
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <Skeleton height={24} width="40%" />
@@ -37,23 +53,34 @@ export function WalletGate({ children, bare }: { children: (address: string, min
         <p style={{ margin: 0, color: 'var(--ink-muted)' }}>
           {miniPay
             ? 'MiniPay is ready. Tap below if your wallet did not connect automatically.'
-            : 'Open this page inside MiniPay for the best experience, or connect a Celo wallet here.'}
+            : 'Connect Valora, MetaMask or another Celo wallet. On your phone, MiniPay is the quickest way in.'}
         </p>
         {error ? <ErrorBanner message={error} onRetry={() => setError(null)} /> : null}
         {!miniPay ? (
-          <Button fullWidth onClick={connect} disabled={connecting}>
-            {connecting ? 'Connecting…' : 'Connect wallet'}
-          </Button>
+          <Button fullWidth onClick={() => setSheet(true)}>Connect wallet</Button>
         ) : (
           <Button fullWidth onClick={connect} disabled={connecting}>
             {connecting ? 'Connecting…' : 'Retry MiniPay connect'}
           </Button>
         )}
+        {sheet && !miniPay ? <ConnectSheet onClose={() => setSheet(false)} /> : null}
       </div>
     );
   }
 
-  if (bare) return <>{children(address, miniPay)}</>;
+  if (wrongChain) {
+    return (
+      <div style={{ padding: '24px 16px' }}>
+        <SwitchNetworkBar onSwitch={doSwitch} busy={switching} chainName={CHAIN_NAME} />
+        {switchErr ? <p className="small" style={{ maxWidth: 520, margin: '8px auto', color: 'var(--danger)' }}>{switchErr}</p> : null}
+        <div style={{ maxWidth: 520, margin: '12px auto', display: 'flex', justifyContent: 'flex-end' }}>
+          <WalletMenu trigger={<span className="small" style={{ color: 'var(--ink-muted)' }}>{shorten(address)} ▾</span>} />
+        </div>
+      </div>
+    );
+  }
+
+  if (bare) return <Fragment key={address}>{children(address, miniPay)}</Fragment>;
 
   return (
     <div style={{ paddingBottom: 72 }}>
@@ -71,12 +98,17 @@ export function WalletGate({ children, bare }: { children: (address: string, min
           <img src="/logo-v2.svg" alt="" width={28} height={28} style={{ borderRadius: 8 }} />
           <strong style={{ color: 'var(--brand)' }}>NairaGuard</strong>
         </span>
-        <span className="small" style={{ color: 'var(--ink-muted)' }}>
-          {miniPay ? 'MiniPay · ' : ''}
-          {shorten(address)}
-        </span>
+        <WalletMenu
+          trigger={
+            <span className="small" style={{ color: 'var(--ink-muted)' }}>
+              {miniPay ? 'MiniPay · ' : ''}
+              {shorten(address)}
+              {miniPay ? '' : ' ▾'}
+            </span>
+          }
+        />
       </header>
-      {children(address, miniPay)}
+      <Fragment key={address}>{children(address, miniPay)}</Fragment>
     </div>
   );
 }
