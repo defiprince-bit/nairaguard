@@ -13,5 +13,5 @@
 | `{{unsubscribe_url}}` | yes | Per-contact unsubscribe link. |
 | `{{first_line}}` | no | Optional personal opener. Replace with an empty string if unused. |
 
-Copy marked `<!-- COPY: marketer to replace -->` is placeholder; marketer owns final wording.
+Final copy is in place.
 Logo is hosted at `https://nairaguard-vert.vercel.app/icon.png`.
