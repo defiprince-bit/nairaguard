@@ -206,6 +206,37 @@ Tests (forge): one vault per owner, `VaultExists` revert, `initialize` cannot be
 - A waitlist wallet becomes `verified` when it calls `createVault` or makes its first deposit from its own address (both tagged, both on-chain proof of ownership). MiniPay can't sign messages, so this replaces SIWE inside MiniPay.
 - The independent-user count keys off **vault owners**, then applies the existing exclusions (team/test list, funded by us directly or via one in-between wallet, no mainnet activity before 6 Oct 00:00 WAT).
 
+## 8. Textile swaps (Task 8b, before mainnet)
+
+Textile FX is RFQ: the agent POSTs `/v2/rfq/request` with `taker = vault` and gets a firm `buyAmount`, a spender and reactor calldata that expire within seconds (fee 1 bp, included). See `docs/textile-research.md`. There's no on-chain `quote()`, so the vault gets a new path.
+
+### Vault: `swapViaTextile(tokenIn, tokenOut, amountIn, minOut, target, spender, data, approvalId)`, agent-only, `whenNotPaused`
+1. `target` and `spender` must be on the factory allowlist (`isTextileTarget`, `isTextileSpender`), set by the factory owner.
+2. Existing checks still apply: supported pair, per-trade limit, daily limit, ask-the-user threshold. Above the threshold, `approvalId` must be an approved, unexpired approval for the same pair, with `amountIn` no more than the approved amount and `minOut` at least `approvedMinOut`.
+3. **Rate floor:** `minOut` must not be worse than the Chainlink NGN/USD rate by more than `maxDeviationBps` (factory, start 300 = 3%, hard cap 1000). This is one-sided: only rates that are worse for the vault are refused. The feed is read each call. It reverts `StalePrice` if `updatedAt` is older than `maxFeedAge` (factory, start 1 h), and `BadPrice` if `answer <= 0`. Decimals come from the feed and both tokens, never hard-coded.
+4. Snapshot all supported token balances, `forceApprove(spender, amountIn)`, call `target` with `data`, then reset the approval to 0. A revert undoes everything.
+5. Afterwards `tokenIn` may drop by at most `amountIn`, `tokenOut` must rise by at least `minOut`, and no other supported balance may change. Otherwise it reverts.
+6. Emit `Swapped(id, tokenIn, tokenOut, amountIn, amountOut)` with the measured `amountOut`.
+
+Fallback: if the feed is dead, the **factory owner** (not the agent) can switch on a manual reference rate with its own max age. A compromised agent key can never set its own floor.
+
+### Approvals
+`proposeSwap` stores `amountIn` and `approvedMinOut`. `approve(id)` starts a window of `approvalWindow` (start 30 min) ending at `expiresAt`. During that window the agent may run it once with a fresh quote meeting the floor. After `expiresAt` it's `Expired`. `reject(id)` is unchanged.
+
+### Agent
+- One `textile_quotes` row per RFQ: size, side, rate, quoted yes or no, expiry, outcome (`filled`, `expired`, `declined`, `no_quote`, `price_moved`) and tx hash. It's exposed through a stats endpoint for the submission.
+- The agent's transaction to the vault always carries `celo_9efd0f97b491`. We never use flows where the user signs an order for a third-party filler.
+- If the RFQ rate is worse than the floor, decline before sending to save gas.
+
+### API
+Approvals: `approvedMinOut` and `expiresAt`. `/status`: `feedRate` and `feedUpdatedAt`, plus `paused: "stale_price"` when the feed is too old.
+
+### Sepolia
+Textile isn't on Celo Sepolia. The mock router mimics the reactor (approve, call with calldata, transfer output to the taker), and a mock feed has settable `updatedAt`, so this path is tested end to end. Mocks use 6 decimals like mainnet.
+
+### Tests (forge)
+Target or spender not allowlisted; approval is 0 after success and after a revert; recipient-diversion calldata reverts; another balance changing reverts; rate below the floor reverts while a better-than-feed rate passes; stale, zero and negative feed values revert; above-threshold trades without an approval, or with an expired one, revert; approved trades below `approvedMinOut` revert; `amountOut` equals the balance change; only the agent can call it.
+
 ## Build order (one Cursor task at a time)
 1. **Vault + tests.** Implement section 1 with a mock Textile router. Done when `forge test` covers: deposit/withdraw, every limit revert, router allowlist, propose/approve/expiry, pause. Deploy to Celo Sepolia.
 2. **Tx builder.** `agent/src/txBuilder.ts` appends `ATTRIBUTION_TAG`. Done when a test proves every built tx carries it.
@@ -216,4 +247,5 @@ Tests (forge): one vault per owner, `VaultExists` revert, `initialize` cannot be
 7. **Loss-example script**: compute the real ₦ loss on ₦500,000 over last month from rate data for the waitlist page.
 8. **Textile integration**: swap mock router for real Textile once addresses are confirmed.
 8a. **VaultFactory** per section 7, with tests. Redeploy on Sepolia and point the agent and dashboard at the factory.
+8b. **Textile swaps** per section 8: new vault implementation and factory redeploy on Sepolia with mocks.
 9. **Mainnet**: deploy vault (owner approval), fund agent, register ERC-8004, first tagged trades. Target 28 Oct.
