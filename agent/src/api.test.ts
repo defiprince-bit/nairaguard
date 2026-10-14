@@ -26,7 +26,7 @@ const state = (ngn: number, usd: number): VaultState => ({
 let live = state(300_000, 100);
 const api = () => createApi({
   db, agentAddress: '0xA2A173A481BC063fEE0EF11c67Fc756DC5f928f4', tokens: { cngn: CNGN, usdt: USDT },
-  readState: async () => live, siwe: { domain: DOMAIN, uri: `https://${DOMAIN}`, chainId: 11142220, client: client as never },
+  readState: async () => live, siwe: { domain: DOMAIN, uri: `https://${DOMAIN}`, chainId: 42220, client: client as never },
   now: () => clock,
 });
 
@@ -132,7 +132,7 @@ describe('waitlist (SIWE)', () => {
     const a = api();
     const id = await join(a);
     const mk = (domain: string, nonce: string) => createSiweMessage({
-      address: acc.address, chainId: 11142220, domain, uri: `https://${domain}`, version: '1', nonce,
+      address: acc.address, chainId: 42220, domain, uri: `https://${domain}`, version: '1', nonce,
       issuedAt: clock, expirationTime: new Date(clock.getTime() + 60_000),
     });
     const post = async (message: string, signer = acc) =>
@@ -179,6 +179,20 @@ describe('waitlist (SIWE)', () => {
     const t = await join(a, { ...base, wallet: acc.address });
     const r = await a.handle({ method: 'POST', url: '/api/waitlist/verify', body: { signupToken: t, ...(await signed(a)) } });
     expect(r).toMatchObject({ status: 200, body: { verified: true } });
+  });
+
+  it('accepts a Celo mainnet (42220) message and rejects a Sepolia-signed one', async () => {
+    const a = api();
+    const t = await join(a);
+    const { nonce, message } = (await a.handle({ method: 'GET', url: `/api/waitlist/nonce?address=${acc.address}` })).body as { nonce: string; message: string };
+    expect(message).toContain('Chain ID: 42220');
+    const sepolia = createSiweMessage({
+      address: acc.address, chainId: 11142220, domain: DOMAIN, uri: `https://${DOMAIN}`, version: '1', nonce,
+      issuedAt: clock, expirationTime: new Date(clock.getTime() + 60_000),
+    });
+    const post = async (m: string) => a.handle({ method: 'POST', url: '/api/waitlist/verify', body: { signupToken: t, message: m, signature: await acc.signMessage({ message: m }) } });
+    expect(await post(sepolia)).toMatchObject({ status: 401, body: { error: 'siwe_wrong_chain' } });
+    expect(await post(message)).toMatchObject({ status: 200, body: { verified: true } });
   });
 
   it('normalises sources', () => {

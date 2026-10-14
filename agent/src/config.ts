@@ -25,3 +25,12 @@ export const ADDRESSES: Partial<Record<typeof NETWORK, NetworkAddresses>> = {
   },
   // celo mainnet: TBD after mainnet deploy (Task 9)
 };
+
+/**
+ * SIWE chain for waitlist wallet verification. Separate from NETWORK: users sign in MiniPay on Celo mainnet
+ * even while the agent trades on Sepolia. Verification is a read-only call (EIP-1271/6492 smart wallets).
+ */
+export const WAITLIST_CHAIN_ID = Number(process.env.WAITLIST_CHAIN_ID ?? 42220);
+export const WAITLIST_RPC_URL =
+  process.env.WAITLIST_RPC_URL ??
+  (WAITLIST_CHAIN_ID === 42220 ? 'https://forno.celo.org' : 'https://forno.celo-sepolia.celo-testnet.org');
