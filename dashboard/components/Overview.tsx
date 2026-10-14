@@ -146,7 +146,7 @@ export function Overview({ vault, owner, miniPay }: { vault: `0x${string}`; owne
 
   const status = agentLine(agent, vaultCheck.at ?? balances?.lastCheckedAt, vaultCheck.ok);
   const live = useMemo(
-    () => (approvals ?? []).filter((a) => a.status !== 'rejected' && msLeft(a.expiresAt) > 0).sort((a, b) => +new Date(a.expiresAt) - +new Date(b.expiresAt)),
+    () => (approvals ?? []).filter((a) => (a.status ?? 'pending') === 'pending' && msLeft(a.expiresAt) > 0).sort((a, b) => +new Date(a.expiresAt) - +new Date(b.expiresAt)),
     [approvals],
   );
   const pending = live.length;

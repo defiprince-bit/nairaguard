@@ -45,8 +45,10 @@ contract Deploy is Script {
         factory = new VaultFactory(address(impl), agent, cngn, usdt);
         factory.setPriceFeed(feed);
         // Allowlisted (target, spender) pairs. Never Permit2.
-        factory.setVenue(reactor, reactor, true, "textile");
-        if (spender != reactor) factory.setVenue(spender, spender, true, "textile");
+        // Sepolia's mock reactor is labelled "textile-mock" so the UI shows "Test swap (mock exchange)".
+        string memory label = block.chainid == CELO_SEPOLIA ? "textile-mock" : "textile";
+        factory.setVenue(reactor, reactor, true, label);
+        if (spender != reactor) factory.setVenue(spender, spender, true, label);
 
         vm.stopBroadcast();
 
@@ -73,6 +75,9 @@ contract Deploy is Script {
         MockERC20 u = new MockERC20(unicode"USD₮", "USDT", 6);
         // 0.00075193 USD/NGN, 8 dp (Chainlink mainnet read, 14 Oct 2026). Agent keeps it fresh on Sepolia.
         MockChainlinkFeed f = new MockChainlinkFeed(8, 75193);
+        // The agent re-stamps the mock feed so the vault's 1h staleness bound holds.
+        address agentAddr = vm.envAddress("AGENT_ADDRESS");
+        f.transferOwnership(agentAddr);
         MockTextileReactor r = new MockTextileReactor();
         c.mint(address(r), 100_000_000e6);
         u.mint(address(r), 100_000e6);

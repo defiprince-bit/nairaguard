@@ -44,14 +44,18 @@ export type ActivityRow = {
   reason: string;
   txHash?: string;
   status: 'pending' | 'confirmed' | 'failed' | 'skipped';
+  /** Pair label from the factory for the target in the vault's Swapped event. */
+  venue?: string | null;
+  venueTarget?: string | null;
 };
 
 export async function insertActivity(db: Db, a: ActivityRow): Promise<void> {
   await db.query(
-    `INSERT INTO activity (vault, kind, token_in, token_out, amount_in, min_out, usd_value, rate, reason, tx_hash, status, amount_out)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+    `INSERT INTO activity (vault, kind, token_in, token_out, amount_in, min_out, usd_value, rate, reason, tx_hash, status, amount_out, venue, venue_target)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
     [a.vault, a.kind, a.tokenIn ?? null, a.tokenOut ?? null, a.amountIn ?? null, a.minOut ?? null,
-     a.usdValue ?? null, a.rate ?? null, a.reason, a.txHash ?? null, a.status, a.amountOut ?? null],
+     a.usdValue ?? null, a.rate ?? null, a.reason, a.txHash ?? null, a.status, a.amountOut ?? null,
+     a.venue ?? null, a.venueTarget?.toLowerCase() ?? null],
   );
 }
 
@@ -113,4 +117,56 @@ export async function markRejected(db: Db, vault: string, onchainId: string, txH
       [vault, r.rows[0]!.tx_hash]);
   }
   return true;
+}
+
+export type RfqOutcome = 'filled' | 'expired' | 'declined' | 'no_quote' | 'price_moved';
+
+export type RfqQuoteRow = {
+  vault: string; venue: string; side: 'ngnToUsd' | 'usdToNgn'; tokenIn: string; tokenOut: string; sellAmount: string;
+  sizeUsd?: number; quoted: boolean; takerPays?: string; buyAmount?: string; rate?: number;
+  feedRate?: number | null; feedUpdatedAt?: Date; expiresAt?: Date; approvalId?: string;
+  outcome: RfqOutcome; outcomeReason?: string; txHash?: string; amountOut?: string; requestedAt: Date;
+};
+
+/** One row per RFQ, whatever happened (design.md §8). */
+export async function insertRfqQuote(db: Db, q: RfqQuoteRow): Promise<void> {
+  await db.query(
+    `INSERT INTO textile_quotes (vault, venue, side, token_in, token_out, sell_amount, size_usd, quoted, taker_pays, buy_amount,
+       rate_ngn_per_usd, feed_rate_ngn_per_usd, feed_updated_at, expires_at, approval_id, outcome, outcome_reason, tx_hash,
+       amount_out, requested_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+    [q.vault.toLowerCase(), q.venue, q.side, q.tokenIn, q.tokenOut, q.sellAmount, q.sizeUsd ?? null, q.quoted,
+     q.takerPays ?? null, q.buyAmount ?? null, q.rate ?? null, q.feedRate ?? null, q.feedUpdatedAt?.toISOString() ?? null,
+     q.expiresAt?.toISOString() ?? null, q.approvalId ?? null, q.outcome, q.outcomeReason ?? null, q.txHash ?? null,
+     q.amountOut ?? null, q.requestedAt.toISOString()]);
+}
+
+/** On-chain SwapApproved: approval → approved, with its execution window. */
+export async function markApproved(db: Db, vault: string, onchainId: string, windowExpiresAt: Date, at: Date): Promise<boolean> {
+  const r = await db.query(
+    `UPDATE approvals SET status='approved', approved_at=$3, window_expires_at=$4
+     WHERE lower(vault)=lower($1) AND onchain_id=$2 AND status='pending' RETURNING onchain_id`,
+    [vault, onchainId, at.toISOString(), windowExpiresAt.toISOString()]);
+  return r.rows.length > 0;
+}
+
+export async function markExecuted(db: Db, vault: string, onchainId: string, txHash: string, at: Date): Promise<void> {
+  await db.query(
+    `UPDATE approvals SET status='executed', executed_tx=$3, executed_at=$4
+     WHERE lower(vault)=lower($1) AND onchain_id=$2 AND status='approved'`,
+    [vault, onchainId, txHash, at.toISOString()]);
+}
+
+/** Oldest approved proposal whose window is still open. */
+export async function readyApproval(db: Db, vault: string, now: Date) {
+  const r = await db.query<{ onchain_id: string; token_in: `0x${string}`; token_out: `0x${string}`; amount_in: string; min_out: string; reason: string }>(
+    `SELECT onchain_id, token_in, token_out, amount_in, min_out, reason FROM approvals
+     WHERE lower(vault)=lower($1) AND status='approved' AND window_expires_at > $2
+     ORDER BY approved_at ASC LIMIT 1`,
+    [vault, now.toISOString()]);
+  const x = r.rows[0];
+  return x && {
+    onchainId: x.onchain_id, tokenIn: x.token_in, tokenOut: x.token_out, amountIn: x.amount_in,
+    approvedMinOut: x.min_out, reason: x.reason,
+  };
 }

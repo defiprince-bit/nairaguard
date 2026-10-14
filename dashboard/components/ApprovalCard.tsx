@@ -35,11 +35,13 @@ export function ApprovalCard({
     return () => clearInterval(t);
   }, []);
   const left = msLeft(item.expiresAt, now);
-  const expired = left <= 0;
+  // Task 8b: approved = waiting for the agent to run it (UI/UX's full states land separately).
+  const settled = item.status === 'approved' || item.status === 'executed';
+  const expired = left <= 0 || item.status === 'expired';
   const rate = approvalRate(item);
   const busy = tx.kind === 'waiting';
   const rejected = tx.kind === 'rejected' || item.status === 'rejected';
-  const done = tx.kind === 'ok' || rejected;
+  const done = tx.kind === 'ok' || rejected || settled;
   const dir = `${item.in.token === 'cNGN' ? '₦' : '$'} → ${item.minOut.token === 'cNGN' ? '₦' : '$'}`;
 
   return (
@@ -56,7 +58,7 @@ export function ApprovalCard({
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
         <strong className="h2" style={{ margin: 0, fontSize: 15 }}>Swap {dir}</strong>
-        <StatusChip status={tx.kind === 'ok' ? 'executed' : rejected ? 'rejected' : expired ? 'expired' : 'pending'} />
+        <StatusChip status={tx.kind === 'ok' || settled ? 'executed' : rejected ? 'rejected' : expired ? 'expired' : 'pending'} />
       </div>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <Amount m={item.in} rate={rate} />

@@ -19,6 +19,8 @@ export type ActivityItem = {
   at: string;
   /** Upcoming: the actual amount received (Money or raw base units). Missing → `out` is the min-out ("at least"). */
   amountOut?: Money | string | null;
+  /** Task 8b: venue from the vault's on-chain Swapped.target ("textile", a pool label; "textile-mock" on Sepolia). */
+  venue?: string | null;
 };
 
 export type ApprovalItem = {
@@ -29,8 +31,12 @@ export type ApprovalItem = {
   expiresAt: string;
   /** Upcoming: may be null when the agent has no fresh rate → show "Rate unavailable", no naira figure. */
   rateNgnPerUsd?: string | null;
-  status?: 'pending' | 'rejected';
+  status?: 'pending' | 'approved' | 'executed' | 'expired' | 'rejected';
   rejectedAt?: string | null;
+  /** Task 8b: user's floor (tokenOut base units); the agent only trades at this or better. */
+  approvedMinOut?: string;
+  approvedAt?: string | null;
+  executedTx?: string | null;
 };
 
 export type AgentStatus = {
@@ -40,6 +46,17 @@ export type AgentStatus = {
   /** Upcoming per-vault field; preferred over the global lastRunAt. */
   lastCheckedAt?: string | null;
   healthy: boolean;
+};
+
+/** GET /api/vault/:address/status (Task 8b adds the reference feed). */
+export type VaultStatus = {
+  vault: string;
+  lastCheckedAt: string | null;
+  ok: boolean | null;
+  /** Official Chainlink ₦ per $1, reference only. */
+  feedRate?: string | null;
+  feedUpdatedAt?: string | null;
+  paused?: 'owner' | 'stale_price' | null;
 };
 
 export type BalancesResponse = {

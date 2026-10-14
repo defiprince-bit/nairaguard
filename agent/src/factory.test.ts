@@ -2,7 +2,8 @@ import { PGlite } from '@electric-sql/pglite';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Log } from 'viem';
 import { type Db, migrate } from './db.js';
-import { DEPOSITED, type LogReader, listVaults, scanFactory, SWAP_REJECTED, VAULT_CREATED } from './factory.js';
+import { DEPOSITED, type LogReader, listVaults, scanFactory, SWAP_APPROVED, SWAP_REJECTED, VAULT_CREATED } from './factory.js';
+import { insertApproval, readyApproval } from './db.js';
 
 const FACTORY = '0xFAC0000000000000000000000000000000000001' as const;
 const ALICE = '0xa11ce00000000000000000000000000000000001';
@@ -11,14 +12,15 @@ const VA = '0x7a00000000000000000000000000000000000001';
 const VB = '0x7b00000000000000000000000000000000000002';
 const CNGN = '0xaA3B7364E418deC4Fb147f1BD2d95A4022082aEA';
 
-type L = { block: bigint; kind: 'created' | 'deposit' | 'rejected'; address: string; args: Record<string, unknown>; tx: string };
+type L = { block: bigint; kind: 'created' | 'deposit' | 'rejected' | 'approved'; address: string; args: Record<string, unknown>; tx: string };
 
 class FakeReader implements LogReader {
   calls: { from: bigint; to: bigint; kind: string }[] = [];
   constructor(public head: bigint, public logs: L[]) {}
   async getBlockNumber() { return this.head; }
   async getLogs(a: Parameters<LogReader['getLogs']>[0]): Promise<Log[]> {
-    const kind = a.event === VAULT_CREATED ? 'created' : a.event === SWAP_REJECTED ? 'rejected' : 'deposit';
+    const kind = a.event === VAULT_CREATED ? 'created' : a.event === SWAP_REJECTED ? 'rejected'
+      : a.event === SWAP_APPROVED ? 'approved' : 'deposit';
     this.calls.push({ from: a.fromBlock, to: a.toBlock, kind });
     const addrs = (Array.isArray(a.address) ? a.address : [a.address]).map((x) => x.toLowerCase());
     return this.logs
@@ -111,6 +113,22 @@ describe('factory scan', () => {
     const s = await scanFactory({ db, client: r, factory: FACTORY, chainId: 1, startBlock: 100n });
     expect(s.created).toBe(0);
     expect((await verified(ALICE))!.verified).toBe(false);
+  });
+
+  it('marks an approval approved with its on-chain execution window', async () => {
+    const r = new FakeReader(120n, [
+      { block: 101n, kind: 'created', address: FACTORY, args: { owner: ALICE, vault: VA }, tx: '0xc1' },
+      { block: 110n, kind: 'approved', address: VA, args: { id: 3n, approvedMinOut: 40_500n, expiresAt: 1_800_001_800n }, tx: '0xa1' },
+    ]);
+    await insertApproval(db, {
+      vault: VA, onchainId: '3', tokenIn: CNGN, tokenOut: CNGN, amountIn: '1', minOut: '40500', usdValue: '1',
+      reason: 'r', txHash: '0xp', expiresAt: new Date(1_800_086_400_000),
+    });
+    const res = await scanFactory({ db, client: r, factory: FACTORY, chainId: 1, startBlock: 100n });
+    expect(res.approved).toBe(1);
+    const ready = await readyApproval(db, VA, new Date(1_800_000_000_000));
+    expect(ready).toMatchObject({ onchainId: '3', approvedMinOut: '40500' });
+    expect(await readyApproval(db, VA, new Date(1_800_001_801_000))).toBeUndefined();
   });
 });
 
