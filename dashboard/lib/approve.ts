@@ -2,9 +2,9 @@ import { createWalletClient, custom, encodeFunctionData, parseAbi, type Hex } fr
 import { CHAIN } from './overview';
 import { tag, waitForReceipt } from './vault';
 
-export const vaultApprovalAbi = parseAbi(['function approve(uint256 id) returns (uint256 amountOut)']);
+export const vaultApprovalAbi = parseAbi(['function approve(uint256 id) returns (uint64 expiresAt)']);
 
-/** Owner executes a proposed swap: Vault.approve(id), with the ERC-8021 attribution suffix. */
+/** Owner approves a proposed swap: Vault.approve(id) opens a 30-min window for the agent (Task 8b). Tagged. */
 export function buildApproveSwap(vault: `0x${string}`, id: bigint) {
   return { to: vault, data: tag(encodeFunctionData({ abi: vaultApprovalAbi, functionName: 'approve', args: [id] })) };
 }

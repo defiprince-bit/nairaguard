@@ -9,6 +9,7 @@ import {
   isTagged,
   tagCalldata,
 } from './txBuilder.js';
+import { vaultAbi } from './vaultAbi.js';
 
 describe('txBuilder attribution', () => {
   it('uses the Loops ERC-8021 suffix for ATTRIBUTION_TAG', () => {
@@ -54,6 +55,18 @@ describe('txBuilder attribution', () => {
 
     const transfer = buildTransfer('0xA2A173A481BC063fEE0EF11c67Fc756DC5f928f4', 1n);
     expect(isTagged(transfer.data)).toBe(true);
+  });
+
+  it('the agent tx to the vault (swapViaRfq) carries celo_9efd0f97b491, even with reactor calldata inside', () => {
+    const vault = '0xD436aA344C0E2a58a607443680651a2c32066be6';
+    const reactor = '0xa9AA0a64769cBed4d3B1Ceb4Df01CdE915C235b3';
+    const tx = buildContractCall({
+      address: vault, abi: vaultAbi, functionName: 'swapViaRfq',
+      args: ['0xF6829D7393dAe24509eb1E52eE8e572e2E271a4f', '0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e', 1n, 1n, reactor, reactor, '0x0dcd7a6c', 0n],
+    });
+    expect(tx.to).toBe(vault);
+    expect(ATTRIBUTION_TAG).toBe('celo_9efd0f97b491');
+    expect(fromDataSuffix(tx.data)?.codes).toContain('celo_9efd0f97b491');
   });
 
   it('does not export a raw send path — only tagged helpers', async () => {

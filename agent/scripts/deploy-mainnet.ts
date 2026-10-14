@@ -1,10 +1,10 @@
 /**
- * Tagged deploy of Vault implementation + VaultFactory (+ optional setRouter) via viem.
+ * Tagged deploy of Vault implementation + VaultFactory, then setPriceFeed + Textile venue pairs, via viem.
  * Creation bytecode = forge artifact + constructor args + ERC-8021 suffix (celo_9efd0f97b491).
  *   (cd ../contracts && forge build)                                       # artifacts in contracts/out
  *   pnpm tsx scripts/deploy-mainnet.ts                                    # dry run: builds + checks tags, sends nothing
  *   NETWORK=celo ALLOW_MAINNET=1 DEPLOYER_PRIVATE_KEY=... AGENT_ADDRESS=... CNGN_ADDRESS=... USDT_ADDRESS=... \
- *     [TEXTILE_ROUTER=...] pnpm tsx scripts/deploy-mainnet.ts --send       # owner-approved only
+ *     pnpm tsx scripts/deploy-mainnet.ts --send                          # owner-approved only
  * After deploy: factory.transferOwnership(owner) → owner acceptOwnership.
  */
 import { readFileSync } from 'node:fs';
@@ -28,7 +28,12 @@ const PLACEHOLDER = '0x0000000000000000000000000000000000000001';
 const agent = env('AGENT_ADDRESS', send ? undefined : '0xA2A173A481BC063fEE0EF11c67Fc756DC5f928f4');
 const cngn = env('CNGN_ADDRESS', send ? undefined : PLACEHOLDER);
 const usdt = env('USDT_ADDRESS', send ? undefined : PLACEHOLDER);
-const router = process.env.TEXTILE_ROUTER ? getAddress(process.env.TEXTILE_ROUTER) : undefined;
+// design.md §8: Chainlink NGN/USD + Textile (target, spender) pairs. Never Permit2.
+const PRICE_FEED = env('PRICE_FEED', '0xc17cbe2db40e53f4984c46f608da6da1ff074c11');
+const VENUES: [Hex, Hex, string][] = [
+  ['0xa9AA0a64769cBed4d3B1Ceb4Df01CdE915C235b3', '0xa9AA0a64769cBed4d3B1Ceb4Df01CdE915C235b3', 'textile'], // LimitOrderReactor
+  ['0x01b006d5c687bde182aa36F542f1f014144742e2', '0x01b006d5c687bde182aa36F542f1f014144742e2', 'textile'], // VaultOrderExecutor
+];
 
 const vault = art('Vault');
 const factory = art('VaultFactory');
@@ -58,7 +63,9 @@ const created = async (label: string, data: Hex) => {
 };
 const impl = await created('VaultImplementation', implTx.data);
 const fac = await created('VaultFactory', buildDeploy({ abi: factory.abi, bytecode: factory.bytecode, args: [impl, agent, cngn, usdt] }).data);
-if (router) {
-  const hash = await sender.send(buildContractCall({ address: fac, abi: factory.abi, functionName: 'setRouter', args: [router, true] } as never));
-  console.log(`setRouter ${router} tx=${hash} status=${(await pc.waitForTransactionReceipt({ hash })).status}`);
-}
+const call = async (label: string, functionName: string, args: unknown[]) => {
+  const hash = await sender.send(buildContractCall({ address: fac, abi: factory.abi, functionName, args } as never));
+  console.log(`${label} tx=${hash} status=${(await pc.waitForTransactionReceipt({ hash })).status}`);
+};
+await call(`setPriceFeed ${PRICE_FEED}`, 'setPriceFeed', [PRICE_FEED]);
+for (const [t, sp, label] of VENUES) await call(`setVenue ${t} ${sp} ${label}`, 'setVenue', [t, sp, true, label]);

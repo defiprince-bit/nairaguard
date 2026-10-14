@@ -3,6 +3,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { type Client, formatUnits, isAddress } from 'viem';
 import { createSiweMessage, parseSiweMessage, verifySiweMessage } from 'viem/siwe';
 import type { Db } from './db.js';
+import type { FeedReading } from './feed.js';
 import type { VaultState } from './loop.js';
 import { computePnl, getBaseline } from './pnl.js';
 
@@ -19,6 +20,10 @@ export type ApiDeps = {
   agentAddress: `0x${string}`;
   erc8004Id?: string;
   tokens: { cngn: `0x${string}`; usdt: `0x${string}` };
+  /** Token decimals (read on-chain at startup). Default 18 for legacy mocks. */
+  decimals?: { cngn: number; usdt: number };
+  /** Reference rate the vault uses (Chainlink NGN/USD or owner fallback). */
+  readFeed?: () => Promise<FeedReading>;
   /** Live on-chain read for limits; optional (falls back to last logged quote for balances). */
   readState?: (vault: `0x${string}`) => Promise<VaultState>;
   /** SIWE expectations. */
@@ -33,8 +38,8 @@ export type ApiResponse = { status: number; body: unknown };
 
 type Money = { token: 'cNGN' | 'USDT'; amount: string; amountNgn: string; amountUsd: string; rate: string; rateAt: string };
 
-function money(token: 'cNGN' | 'USDT', amount: string, rate: number, rateAt: Date | string): Money {
-  const units = Number(formatUnits(BigInt(amount), 18));
+function money(token: 'cNGN' | 'USDT', amount: string, rate: number, rateAt: Date | string, dec = 18): Money {
+  const units = Number(formatUnits(BigInt(amount), dec));
   const ngn = token === 'cNGN' ? units : units * rate;
   return {
     token, amount, amountNgn: ngn.toFixed(2), amountUsd: (ngn / rate).toFixed(2), rate: String(rate),
@@ -47,6 +52,9 @@ const json = (status: number, body: unknown): ApiResponse => ({ status, body });
 
 export function createApi(d: ApiDeps) {
   const now = () => d.now?.() ?? new Date();
+  const decOf = (t: 'cNGN' | 'USDT') => (t === 'cNGN' ? d.decimals?.cngn : d.decimals?.usdt) ?? 18;
+  const pnlDec = { ngn: decOf('cNGN'), usd: decOf('USDT') };
+  const m = (t: 'cNGN' | 'USDT', amount: string, rate: number, at: Date | string) => money(t, amount, rate, at, decOf(t));
   const sym = (a: string | null): 'cNGN' | 'USDT' =>
     a?.toLowerCase() === d.tokens.cngn.toLowerCase() ? 'cNGN' : 'USDT';
 
@@ -65,10 +73,10 @@ export function createApi(d: ApiDeps) {
     const ngn = st?.ngnBalance.toString() ?? q!.ngn_balance;
     const usd = st?.usdBalance.toString() ?? q!.usd_balance;
     if (!rate) return json(503, { error: 'no_rate_yet' });
-    const bal = [money('cNGN', ngn, rate, rateAt), money('USDT', usd, rate, rateAt)];
+    const bal = [m('cNGN', ngn, rate, rateAt), m('USDT', usd, rate, rateAt)];
     const total = Number(bal[0]!.amountNgn) + Number(bal[1]!.amountNgn);
     const b = await getBaseline(d.db, vault);
-    const p = b ? computePnl(b, ngn, usd, rate) : undefined;
+    const p = b ? computePnl(b, ngn, usd, rate, pnlDec) : undefined;
     return json(200, {
       balances: bal,
       ngnShareBps: total > 0 ? Math.round((Number(bal[0]!.amountNgn) / total) * 10_000) : 0,
@@ -98,14 +106,24 @@ export function createApi(d: ApiDeps) {
       const usdLeg = a.token_in?.toLowerCase() === d.tokens.usdt.toLowerCase() ? a.amount_in : a.amount_out;
       if (usdLeg) total += BigInt(usdLeg);
     }
-    return (Number(total) / 1e18).toFixed(2);
+    return Number(formatUnits(total, decOf('USDT'))).toFixed(2);
   }
 
   async function status(vault: string) {
     const r = await d.db.query<{ ran_at: string; ok: boolean; error: string | null }>(
       'SELECT ran_at, ok, error FROM agent_runs WHERE lower(vault)=$1 ORDER BY ran_at DESC, id DESC LIMIT 1', [vault]);
     const last = r.rows[0];
-    return json(200, { vault, lastCheckedAt: last ? iso(last.ran_at) : null, ok: last ? last.ok : null });
+    const feed = d.readFeed ? await d.readFeed().catch(() => undefined) : undefined;
+    const st = d.readState ? await d.readState(vault as `0x${string}`).catch(() => undefined) : undefined;
+    // paused: "owner" when the owner paused, "stale_price" when the reference rate is too old (vault reverts StalePrice).
+    const paused = st?.paused ? 'owner' : feed && feed.stale ? 'stale_price' : null;
+    return json(200, {
+      vault, lastCheckedAt: last ? iso(last.ran_at) : null, ok: last ? last.ok : null,
+      // Official (Chainlink) ₦ per $1, for reference only; the tradable rate comes from RFQ quotes.
+      feedRate: feed?.rateNgnPerUsd != null ? feed.rateNgnPerUsd.toFixed(2) : null,
+      feedUpdatedAt: feed ? iso(feed.updatedAt) : null,
+      paused,
+    });
   }
 
   /** Keyset paging on (created_at, id), newest first. Cursor = base64url(JSON [created_at text, id]). */
@@ -141,11 +159,13 @@ export function createApi(d: ApiDeps) {
         const outAmt = a.amount_out; // actual received; null for legacy rows (never minOut)
         return {
           id: String(a.id), kind: a.kind === 'propose' ? 'swap' : a.kind, reason: a.reason, txHash: a.tx_hash, status: a.status, at: iso(at),
-          in: a.amount_in && rate ? money(sym(a.token_in), a.amount_in, rate, at) : undefined,
-          out: outAmt && rate ? money(sym(a.token_out), outAmt, rate, at) : undefined,
+          in: a.amount_in && rate ? m(sym(a.token_in), a.amount_in, rate, at) : undefined,
+          out: outAmt && rate ? m(sym(a.token_out), outAmt, rate, at) : undefined,
           // Actual tokenOut received (base units), from the vault's Swapped event. Null for legacy rows.
           amountOut: outAmt ?? null,
           feeNgn: a.fee_ngn, pnlNgn: a.pnl_ngn,
+          // From the vault's Swapped.target via the factory's pair label; null for legacy rows.
+          venue: a.kind === 'swap' ? a.venue ?? null : null,
         };
       }),
     });
@@ -155,17 +175,25 @@ export function createApi(d: ApiDeps) {
     const r = await d.db.query<Record<string, string>>(
       `SELECT a.*, (SELECT rate FROM quotes q WHERE q.vault=lower(a.vault) ORDER BY q.created_at DESC LIMIT 1) AS rate
        FROM approvals a WHERE lower(a.vault)=$1
-         AND ((a.status='pending' AND a.expires_at > $2) OR a.status='rejected')
+         AND (a.status IN ('pending','approved','executed','rejected','expired'))
        ORDER BY a.created_at DESC LIMIT 100`,
-      [vault, now().toISOString()]);
+      [vault]);
     return json(200, {
       items: r.rows.map((a) => {
         const rate = Number(a.rate ?? 0);
         const token = (t: string, amount: string) =>
-          rate > 0 ? money(sym(t), amount, rate, a.created_at) : { token: sym(t), amount, amountNgn: null, amountUsd: null, rate: null, rateAt: null };
+          rate > 0 ? m(sym(t), amount, rate, a.created_at) : { token: sym(t), amount, amountNgn: null, amountUsd: null, rate: null, rateAt: null };
+        const t = now().getTime();
+        // Pending: owner must approve before the proposal deadline. Approved: agent must run it before the window ends.
+        const deadline = a.status === 'approved' && a.window_expires_at ? a.window_expires_at : a.expires_at;
+        const st = (a.status === 'pending' || a.status === 'approved') && new Date(deadline!).getTime() <= t ? 'expired' : a.status;
         return {
-          id: a.onchain_id, reason: a.reason, expiresAt: iso(a.expires_at),
-          status: a.status as 'pending' | 'rejected',
+          id: a.onchain_id, reason: a.reason, expiresAt: iso(deadline!),
+          status: st as 'pending' | 'approved' | 'executed' | 'expired' | 'rejected',
+          approvedAt: a.approved_at ? iso(a.approved_at) : null,
+          // User's floor in tokenOut base units: the agent only trades at this or better.
+          approvedMinOut: a.min_out,
+          executedTx: a.executed_tx ?? null,
           rejectedAt: a.rejected_at ? iso(a.rejected_at) : null,
           rateNgnPerUsd: rate > 0 ? String(rate) : null,
           rateNote: rate > 0 ? undefined : 'rate unavailable',
@@ -173,6 +201,46 @@ export function createApi(d: ApiDeps) {
           minOut: token(a.token_out, a.min_out),
         };
       }),
+    });
+  }
+
+  /** RFQ stats for the submission / build-in-public posts: every quote requested, quoted and filled. */
+  async function quoteStats(q: URLSearchParams) {
+    const since = q.get('since');
+    if (since && Number.isNaN(Date.parse(since))) return json(400, { error: 'since_invalid' });
+    const sinceIso = since ? new Date(since).toISOString() : '1970-01-01T00:00:00Z';
+    const agg = `count(*)::int AS requested,
+        count(*) FILTER (WHERE quoted)::int AS quoted,
+        count(*) FILTER (WHERE outcome='filled')::int AS filled,
+        count(*) FILTER (WHERE outcome='expired')::int AS expired,
+        count(*) FILTER (WHERE outcome='declined')::int AS declined,
+        count(*) FILTER (WHERE outcome='no_quote')::int AS no_quote,
+        count(*) FILTER (WHERE outcome='price_moved')::int AS price_moved,
+        COALESCE(sum(size_usd),0)::float8 AS requested_usd,
+        COALESCE(sum(size_usd) FILTER (WHERE quoted),0)::float8 AS quoted_usd,
+        COALESCE(sum(size_usd) FILTER (WHERE outcome='filled'),0)::float8 AS filled_usd,
+        avg(rate_ngn_per_usd)::float8 AS avg_rate,
+        avg(feed_rate_ngn_per_usd)::float8 AS avg_feed_rate,
+        avg((rate_ngn_per_usd - feed_rate_ngn_per_usd) / feed_rate_ngn_per_usd * 10000)
+          FILTER (WHERE quoted AND feed_rate_ngn_per_usd > 0)::float8 AS avg_gap_bps`;
+    const shape = (r: Record<string, number | null>) => ({
+      requested: r.requested, quoted: r.quoted, filled: r.filled,
+      outcomes: { filled: r.filled, expired: r.expired, declined: r.declined, no_quote: r.no_quote, price_moved: r.price_moved },
+      requestedUsd: Number(r.requested_usd ?? 0).toFixed(2), quotedUsd: Number(r.quoted_usd ?? 0).toFixed(2),
+      filledUsd: Number(r.filled_usd ?? 0).toFixed(2),
+      avgRateNgnPerUsd: r.avg_rate != null ? Number(r.avg_rate).toFixed(2) : null,
+      avgFeedRateNgnPerUsd: r.avg_feed_rate != null ? Number(r.avg_feed_rate).toFixed(2) : null,
+      // Market (quote) vs official (Chainlink) rate, bps. Positive = market gives more ₦ per $.
+      avgGapBps: r.avg_gap_bps != null ? Math.round(Number(r.avg_gap_bps)) : null,
+    });
+    const tot = await d.db.query<Record<string, number | null>>(`SELECT ${agg} FROM textile_quotes WHERE requested_at >= $1`, [sinceIso]);
+    const wk = await d.db.query<Record<string, number | null> & { week: string | Date }>(
+      `SELECT date_trunc('week', requested_at) AS week, ${agg} FROM textile_quotes WHERE requested_at >= $1
+       GROUP BY 1 ORDER BY 1 DESC LIMIT 26`, [sinceIso]);
+    return json(200, {
+      since: since ? sinceIso : null,
+      ...shape(tot.rows[0]!),
+      weekly: wk.rows.map((r) => ({ weekStart: iso(r.week), ...shape(r) })),
     });
   }
 
@@ -316,6 +384,7 @@ export function createApi(d: ApiDeps) {
         return m[2] === 'activity' ? await activity(v, u.searchParams) : await ({ balances, approvals, limits, status } as const)[m[2] as 'balances'](v);
       }
       if (req.method === 'GET' && p === '/api/agent') return await agent();
+      if (req.method === 'GET' && p === '/api/quotes/stats') return await quoteStats(u.searchParams);
       if (req.method === 'GET' && p === '/api/waitlist/nonce') return await nonce(u.searchParams.get('address'));
       if (req.method === 'POST' && p === '/api/waitlist') return await waitlist(req.body, normaliseSource(u.searchParams.get('source')));
       if (req.method === 'POST' && p === '/api/waitlist/verify') return await verify(req.body);

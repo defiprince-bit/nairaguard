@@ -48,7 +48,7 @@ export function ApprovalsList({ owner, vault, onCount }: { owner: `0x${string}`;
   }, [vault]);
 
   const visible = items ?? [];
-  const pendingCount = visible.filter((i) => i.status !== 'rejected' && tx[i.id]?.kind !== 'ok' && tx[i.id]?.kind !== 'rejected').length;
+  const pendingCount = visible.filter((i) => (i.status ?? 'pending') === 'pending' && tx[i.id]?.kind !== 'ok' && tx[i.id]?.kind !== 'rejected').length;
   useEffect(() => { onCount?.(pendingCount); }, [pendingCount, onCount]);
 
   async function approve(item: ApprovalItem) {

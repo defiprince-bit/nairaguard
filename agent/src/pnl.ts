@@ -1,10 +1,13 @@
 import { formatUnits } from 'viem';
 import type { Db } from './db.js';
 
-const n = (v: bigint | string) => Number(formatUnits(BigInt(v), 18));
+export type Decimals = { ngn: number; usd: number };
+const D18: Decimals = { ngn: 18, usd: 18 };
+const n = (v: bigint | string, dec: number) => Number(formatUnits(BigInt(v), dec));
 
 /** Vault value in ₦ at `rate` (₦ per $1). */
-export const valueNgn = (ngn: bigint | string, usd: bigint | string, rate: number) => n(ngn) + n(usd) * rate;
+export const valueNgn = (ngn: bigint | string, usd: bigint | string, rate: number, dec: Decimals = D18) =>
+  n(ngn, dec.ngn) + n(usd, dec.usd) * rate;
 
 export type Baseline = { ngnStart: string; usdStart: string; rateStart: string; fundedAt: Date };
 
@@ -12,9 +15,9 @@ export type Baseline = { ngnStart: string; usdStart: string; rateStart: string; 
  * P&L = vault value now (₦) − starting balances valued at today's rate (no trading).
  * Uses real balances, so swap fees and slippage are already netted out.
  */
-export function computePnl(b: Baseline, ngn: bigint | string, usd: bigint | string, rate: number) {
-  const value = valueNgn(ngn, usd, rate);
-  const hold = valueNgn(b.ngnStart, b.usdStart, rate);
+export function computePnl(b: Baseline, ngn: bigint | string, usd: bigint | string, rate: number, dec: Decimals = D18) {
+  const value = valueNgn(ngn, usd, rate, dec);
+  const hold = valueNgn(b.ngnStart, b.usdStart, rate, dec);
   const pnlNgn = value - hold;
   return { valueNgn: value, holdValueNgn: hold, pnlNgn, pnlUsd: pnlNgn / rate };
 }
@@ -27,7 +30,7 @@ export async function getBaseline(db: Db, vault: string): Promise<Baseline | und
 }
 
 /** Records the baseline the first time the vault is seen funded, then logs this quote with its P&L. */
-export async function logQuote(db: Db, vault: string, ngn: bigint, usd: bigint, rate: number, now: Date) {
+export async function logQuote(db: Db, vault: string, ngn: bigint, usd: bigint, rate: number, now: Date, dec: Decimals = D18) {
   const v = vault.toLowerCase();
   if (ngn > 0n || usd > 0n) {
     await db.query(
@@ -35,7 +38,7 @@ export async function logQuote(db: Db, vault: string, ngn: bigint, usd: bigint, 
        ON CONFLICT (vault) DO NOTHING`, [v, ngn.toString(), usd.toString(), String(rate), now.toISOString()]);
   }
   const b = await getBaseline(db, v);
-  const p = b ? computePnl(b, ngn, usd, rate) : { valueNgn: valueNgn(ngn, usd, rate), holdValueNgn: 0, pnlNgn: 0 };
+  const p = b ? computePnl(b, ngn, usd, rate, dec) : { valueNgn: valueNgn(ngn, usd, rate, dec), holdValueNgn: 0, pnlNgn: 0 };
   await db.query(
     `INSERT INTO quotes (vault, rate, ngn_balance, usd_balance, value_ngn, hold_value_ngn, pnl_ngn, created_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,

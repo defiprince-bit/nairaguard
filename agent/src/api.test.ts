@@ -20,7 +20,7 @@ const client = createPublicClient({ transport: custom({ request: async () => { t
 let db: Db;
 let clock: Date;
 const state = (ngn: number, usd: number): VaultState => ({
-  ngnBalance: e18(ngn), usdBalance: e18(usd), dailySpentUsd: 0n, dayStart: 0n, paused: false,
+  ngnBalance: e18(ngn), usdBalance: e18(usd), ngnDecimals: 18, usdDecimals: 18, dailySpentUsd: 0n, dayStart: 0n, paused: false,
   limits: { maxTradeUsd: e18(100), maxDailyUsd: e18(500), approvalThresholdUsd: e18(100), maxSlippageBps: 100, targetNgnBps: 5000 },
 });
 let live = state(300_000, 100);
@@ -292,5 +292,70 @@ describe('waitlist (SIWE)', () => {
   it('normalises sources', () => {
     expect(normaliseSource('minipay')).toBe('minipay');
     expect(normaliseSource(undefined)).toBe('direct');
+  });
+});
+
+describe('Task 8b API', () => {
+  const insertApproval = (id: string, status = 'pending', extra = '') =>
+    db.query(`INSERT INTO approvals (vault, onchain_id, token_in, token_out, amount_in, min_out, usd_value, reason, expires_at, status ${extra ? ', approved_at, window_expires_at' : ''})
+      VALUES ($1,$2,$3,$4,'30000000','40500000000','30','r','2026-10-15T12:00:00Z',$5 ${extra})`, [v, id, USDT, CNGN, status]);
+
+  it('approvals expose approvedMinOut and expiresAt (proposal deadline, then the 30-min window)', async () => {
+    await insertApproval('1');
+    await insertApproval('2', 'approved', `, '2026-10-14T11:50:00Z', '2026-10-14T12:20:00Z'`);
+    const items = ((await api().handle({ method: 'GET', url: `/api/vault/${VAULT}/approvals` })).body as any).items;
+    const byId = Object.fromEntries(items.map((i: any) => [i.id, i]));
+    expect(byId['1']).toMatchObject({ status: 'pending', approvedMinOut: '40500000000', expiresAt: '2026-10-15T12:00:00.000Z' });
+    expect(byId['2']).toMatchObject({
+      status: 'approved', approvedMinOut: '40500000000', expiresAt: '2026-10-14T12:20:00.000Z', approvedAt: '2026-10-14T11:50:00.000Z',
+    });
+    clock = new Date('2026-10-14T12:21:00Z');
+    const later = ((await api().handle({ method: 'GET', url: `/api/vault/${VAULT}/approvals` })).body as any).items;
+    expect(later.find((i: any) => i.id === '2').status).toBe('expired');
+  });
+
+  const withFeed = (stale: boolean) => createApi({
+    db, agentAddress: '0xA2A173A481BC063fEE0EF11c67Fc756DC5f928f4', tokens: { cngn: CNGN, usdt: USDT },
+    readState: async () => live, now: () => clock,
+    readFeed: async () => ({ rateNgnPerUsd: 1329.91, answer: 75193n, decimals: 8, updatedAt: new Date('2026-10-14T11:58:00Z'), stale }),
+    siwe: { domain: DOMAIN, uri: `https://${DOMAIN}`, chainId: 42220, client: client as never },
+  });
+
+  it('/status has feedRate and feedUpdatedAt, and paused "stale_price" when the feed is too old', async () => {
+    const ok = (await withFeed(false).handle({ method: 'GET', url: `/api/vault/${VAULT}/status` })).body as any;
+    expect(ok).toMatchObject({ feedRate: '1329.91', feedUpdatedAt: '2026-10-14T11:58:00.000Z', paused: null });
+    const stale = (await withFeed(true).handle({ method: 'GET', url: `/api/vault/${VAULT}/status` })).body as any;
+    expect(stale.paused).toBe('stale_price');
+    live = { ...live, paused: true };
+    expect(((await withFeed(false).handle({ method: 'GET', url: `/api/vault/${VAULT}/status` })).body as any).paused).toBe('owner');
+  });
+
+  it('activity exposes venue from the stored on-chain label, never for non-swaps', async () => {
+    await logQuote(db, VAULT, e18(300_000), e18(100), 1500, clock);
+    await db.query(`INSERT INTO activity (vault, kind, token_in, token_out, amount_in, amount_out, rate, reason, status, venue, venue_target)
+      VALUES ($1,'swap',$2,$3,'1','1','1500','r','confirmed','textile','0xa9aa0a64769cbed4d3b1ceb4df01cde915c235b3'),
+             ($1,'swap',$2,$3,'1','1','1500','r','confirmed','ubeswap-cngn-usdt','0xd3c'),
+             ($1,'swap',$2,$3,'1','1','1500','legacy','confirmed',NULL,NULL)`, [v, CNGN, USDT]);
+    const items = ((await api().handle({ method: 'GET', url: `/api/vault/${VAULT}/activity` })).body as any).items;
+    expect(items.map((i: any) => i.venue).sort()).toEqual(['textile', 'ubeswap-cngn-usdt', null].sort());
+  });
+
+  it('/api/quotes/stats counts every RFQ requested, quoted and filled, with the feed gap', async () => {
+    const ins = (quoted: boolean, outcome: string, size: number, rate: number | null, at: string) =>
+      db.query(`INSERT INTO textile_quotes (vault, side, token_in, token_out, sell_amount, size_usd, quoted, rate_ngn_per_usd,
+        feed_rate_ngn_per_usd, outcome, requested_at) VALUES ($1,'ngnToUsd',$2,$3,'1',$4,$5,$6,1330,$7,$8)`,
+        [v, CNGN, USDT, size, quoted, rate, outcome, at]);
+    await ins(true, 'filled', 50, 1361, '2026-10-14T10:00:00Z');
+    await ins(true, 'price_moved', 30, 1340, '2026-10-14T10:05:00Z');
+    await ins(false, 'no_quote', 20, null, '2026-10-14T10:10:00Z');
+    await ins(true, 'expired', 10, 1361, '2026-10-07T10:00:00Z');
+    const r = (await api().handle({ method: 'GET', url: '/api/quotes/stats' })).body as any;
+    expect(r).toMatchObject({ requested: 4, quoted: 3, filled: 1, requestedUsd: '110.00', quotedUsd: '90.00', filledUsd: '50.00' });
+    expect(r.outcomes).toEqual({ filled: 1, expired: 1, declined: 0, no_quote: 1, price_moved: 1 });
+    expect(r.avgGapBps).toBeGreaterThan(150);
+    expect(r.weekly).toHaveLength(2);
+    const since = (await api().handle({ method: 'GET', url: '/api/quotes/stats?since=2026-10-13T00:00:00Z' })).body as any;
+    expect(since.requested).toBe(3);
+    expect((await api().handle({ method: 'GET', url: '/api/quotes/stats?since=nope' })).status).toBe(400);
   });
 });
