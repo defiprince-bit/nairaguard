@@ -35,11 +35,16 @@ export function CreateVaultStep({
     setBusy(true);
     setError(null);
     try {
+      // Idempotent: an earlier tap may already have created it (VaultExists would revert).
+      const existing = await lookupVault(factory, owner).catch(() => null);
+      if (existing) return onCreated(existing);
       await sendAndWait(eth, owner, buildCreateVault(factory, presetLimits(preset, target)));
       const v = await lookupVault(factory, owner);
       if (!v) throw new Error('Vault not found after creation.');
       onCreated(v);
     } catch (e) {
+      const v = await lookupVault(factory, owner).catch(() => null);
+      if (v) return onCreated(v);
       setError(friendlyError(e));
     } finally {
       setBusy(false);
@@ -95,18 +100,18 @@ export function DepositStep({
   async function deposit() {
     const eth = window.ethereum;
     if (!eth) return setError({ kind: 'error', message: 'No wallet found.' });
-    let units: bigint;
-    try {
-      units = parseUnits(amount || '0', 18);
-    } catch {
-      return setError({ kind: 'error', message: 'Enter a valid amount.' });
-    }
-    if (units <= 0n) return setError({ kind: 'error', message: 'Enter an amount above zero.' });
+    if (!(Number(amount) > 0)) return setError({ kind: 'error', message: 'Enter an amount above zero.' });
     setBusy(true);
     setError(null);
     try {
       const tokens = await factoryTokens(eth, factory);
       const addr = tokens[token];
+      let units: bigint;
+      try {
+        units = parseUnits(amount, tokens.decimals[token]);
+      } catch {
+        return setError({ kind: 'error', message: 'Enter a valid amount.' });
+      }
       await sendAndWait(eth, owner, buildApprove(addr, vault, units));
       await sendAndWait(eth, owner, buildDeposit(vault, addr, units));
       onDone();

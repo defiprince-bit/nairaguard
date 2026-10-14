@@ -29,3 +29,10 @@ describe('friendlyError', () => {
     expect(spy).toHaveBeenCalledWith(e);
   });
 });
+
+describe('createVault reverts', () => {
+  it('maps VaultExists (0x4239717c)', async () => {
+    const { classifyError, MSG_VAULT_EXISTS } = await import('./errors');
+    expect(classifyError({ message: 'execution reverted', data: '0x4239717c' }).message).toBe(MSG_VAULT_EXISTS);
+  });
+});

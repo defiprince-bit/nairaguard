@@ -24,7 +24,7 @@ export const factoryAbi = parseAbi([
   'function usdt() view returns (address)',
 ]);
 export const vaultAbi = parseAbi(['function deposit(address token, uint256 amount)']);
-export const erc20Abi = parseAbi(['function approve(address spender, uint256 amount) returns (bool)']);
+export const erc20Abi = parseAbi(['function approve(address spender, uint256 amount) returns (bool)', 'function decimals() view returns (uint8)']);
 
 export type Limits = {
   maxTradeUsd: bigint;
@@ -95,9 +95,13 @@ type Eth = { request: (a: { method: string; params?: unknown[] }) => Promise<unk
  * Reads vaultOf(owner) over the app's own public RPC for CHAIN, not the wallet's provider:
  * MiniPay sits on Celo mainnet, so an eth_call through it to a Sepolia factory returns 0x.
  */
-export async function lookupVault(factory: `0x${string}`, owner: `0x${string}`): Promise<`0x${string}` | null> {
+export function appClient() {
   const chain = process.env.NEXT_PUBLIC_NETWORK === 'celo' ? celo : celoSepolia;
-  const pc = createPublicClient({ chain, transport: http() });
+  return createPublicClient({ chain, transport: http() });
+}
+
+export async function lookupVault(factory: `0x${string}`, owner: `0x${string}`): Promise<`0x${string}` | null> {
+  const pc = appClient();
   const r = await pc.call(vaultOfCall(factory, owner));
   return decodeVaultOf((r.data ?? '0x') as Hex);
 }
@@ -107,22 +111,32 @@ export async function sendTx(eth: Eth, from: `0x${string}`, tx: Tx): Promise<Hex
   return (await eth.request({ method: 'eth_sendTransaction', params: [{ from, to: tx.to, data: tx.data }] })) as Hex;
 }
 
-export async function waitForReceipt(eth: Eth, hash: Hex, tries = 60): Promise<{ status: Hex }> {
+/**
+ * Polls the receipt over the app's own RPC, not the wallet's: MiniPay's read provider can be on a
+ * different chain than the one it signs for, so it never returns (or errors on) the Sepolia receipt.
+ */
+export async function waitForReceipt(_eth: Eth, hash: Hex, tries = 60): Promise<{ status: Hex }> {
+  const pc = appClient();
   for (let i = 0; i < tries; i++) {
-    const rc = (await eth.request({ method: 'eth_getTransactionReceipt', params: [hash] })) as { status: Hex } | null;
-    if (rc) return rc;
+    try {
+      const rc = await pc.getTransactionReceipt({ hash });
+      return { status: rc.status === 'success' ? '0x1' : '0x0' };
+    } catch { /* not mined yet */ }
     await new Promise((r) => setTimeout(r, 2000));
   }
   throw new Error('Timed out waiting for confirmation');
 }
 
-/** Read the factory's cNGN / USD₮ token addresses (deposit targets). */
-export async function factoryTokens(eth: Eth, factory: `0x${string}`): Promise<{ cngn: `0x${string}`; usdt: `0x${string}` }> {
-  const read = async (fn: 'cNGN' | 'usdt') => {
-    const data = encodeFunctionData({ abi: factoryAbi, functionName: fn });
-    const r = (await eth.request({ method: 'eth_call', params: [{ to: factory, data }, 'latest'] })) as Hex;
-    return decodeFunctionResult({ abi: factoryAbi, functionName: fn, data: r }) as `0x${string}`;
-  };
-  const [cngn, usdt] = await Promise.all([read('cNGN'), read('usdt')]);
-  return { cngn, usdt };
+/** Read the factory's cNGN / USD₮ token addresses and decimals (deposit targets), over the app's RPC. */
+export async function factoryTokens(_eth: Eth, factory: `0x${string}`): Promise<{
+  cngn: `0x${string}`; usdt: `0x${string}`; decimals: { cngn: number; usdt: number };
+}> {
+  const pc = appClient();
+  const [cngn, usdt] = await Promise.all([
+    pc.readContract({ address: factory, abi: factoryAbi, functionName: 'cNGN' }) as Promise<`0x${string}`>,
+    pc.readContract({ address: factory, abi: factoryAbi, functionName: 'usdt' }) as Promise<`0x${string}`>,
+  ]);
+  const dec = (a: `0x${string}`) => pc.readContract({ address: a, abi: erc20Abi, functionName: 'decimals' }).then(Number);
+  const [dc, du] = await Promise.all([dec(cngn), dec(usdt)]);
+  return { cngn, usdt, decimals: { cngn: dc, usdt: du } };
 }

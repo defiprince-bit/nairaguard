@@ -3,6 +3,8 @@ export type FriendlyError = { kind: 'error' | 'cancelled'; message: string };
 export const MSG_FEES = 'Add a little USDC to pay network fees.';
 export const MSG_BALANCE = "You don't have enough of this token.";
 export const MSG_CANCELLED = 'You cancelled this in your wallet.';
+export const MSG_VAULT_EXISTS = 'You already have a vault. Reopen the app to see it.';
+export const MSG_TIMEOUT = 'Still confirming. Wait a minute, then reopen the app.';
 export const MSG_GENERIC = 'Something went wrong. Please try again.';
 
 type ErrLike = { code?: unknown; name?: unknown; message?: unknown; shortMessage?: unknown; details?: unknown; data?: unknown; cause?: unknown };
@@ -39,6 +41,8 @@ export function classifyError(e: unknown): FriendlyError {
     || /user rejected|rejected the request|request rejected|denied|user cancel/i.test(text)) {
     return { kind: 'cancelled', message: MSG_CANCELLED };
   }
+  if (/0x4239717c|VaultExists/i.test(text)) return { kind: 'error', message: MSG_VAULT_EXISTS };
+  if (/timed out waiting for confirmation/i.test(text)) return { kind: 'error', message: MSG_TIMEOUT };
   if (/0xf4d678b8|InsufficientBalance|exceeds balance|transfer amount exceeds/i.test(text)) {
     return { kind: 'error', message: MSG_BALANCE };
   }
