@@ -243,6 +243,9 @@ Textile isn't on Celo Sepolia. The mock router mimics the reactor (approve, call
 ### Tests (forge)
 Target or spender not allowlisted; approval is 0 after success and after a revert; recipient-diversion calldata reverts; another balance changing reverts; rate below the floor reverts while a better-than-feed rate passes; stale, zero and negative feed values revert; above-threshold trades without an approval, or with an expired one, revert; approved trades below `approvedMinOut` revert; `amountOut` equals the balance change; only the agent can call it.
 
+## Mainnet launch
+Follow `docs/mainnet-runbook.md`, and run `pnpm verify:deploy` after the deploy, then again with `--after-transfer` once the owner accepts ownership. Mainnet uses its own Railway service and database. Vercel needs `NEXT_PUBLIC_NETWORK=celo`, the mainnet `NEXT_PUBLIC_FACTORY_ADDRESS` and `AGENT_API_URL` set to agent-mainnet before the deploy. Stats default to chain 42220.
+
 ## Build order (one Cursor task at a time)
 1. **Vault + tests.** Implement section 1 with a mock Textile router. Done when `forge test` covers: deposit/withdraw, every limit revert, router allowlist, propose/approve/expiry, pause. Deploy to Celo Sepolia.
 2. **Tx builder.** `agent/src/txBuilder.ts` appends `ATTRIBUTION_TAG`. Done when a test proves every built tx carries it.
