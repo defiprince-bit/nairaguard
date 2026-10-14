@@ -7,9 +7,18 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type { Db } from './db.js';
 
-export const MINIPAY_DEEPLINK_BASE = 'https://link.minipay.xyz/browse?url=';
-
+/** Optional full MiniPay CTA override (env MINIPAY_DEEPLINK_BASE). Prefer MINIPAY_MINIAPP_ID. */
 export type Contact = { id: number; email: string; source: string; from_minipay: boolean };
+
+export type MinipayLinkOpts = { miniappId?: string; deeplinkBase?: string };
+
+/** MiniPay Discover deeplink when we have a listing id; undefined means use the plain dashboard URL. */
+export function minipayCta(opts: MinipayLinkOpts = {}): string | undefined {
+  if (opts.deeplinkBase?.trim()) return opts.deeplinkBase.trim();
+  const id = opts.miniappId?.trim();
+  if (id) return `https://link.minipay.xyz/miniapp?id=${encodeURIComponent(id)}`;
+  return undefined;
+}
 
 /** Hex HMAC over "unsub:<contactId>". */
 export function signUnsubscribe(contactId: number, secret: string): string {
@@ -37,15 +46,20 @@ export async function unsubscribe(db: Db, contactId: number, at = new Date()): P
   return r.rows.length;
 }
 
-/** MiniPay signups open inside MiniPay; everyone else gets the browser connect flow. Both carry utm_source. */
+/**
+ * MiniPay signups: Discover deeplink when MINIPAY_MINIAPP_ID (or MINIPAY_DEEPLINK_BASE override) is set;
+ * otherwise the plain dashboard /app URL. Everyone else gets /app?connect=1. Always carry utm_*.
+ * The deprecated link.minipay.xyz/browse?url= form is never used as a default.
+ */
 export function ctaUrl(c: Pick<Contact, 'source' | 'from_minipay'>, dashboardUrl: string, campaign: string,
-  minipayBase = MINIPAY_DEEPLINK_BASE): string {
-  const minipay = c.source === 'minipay' || c.from_minipay;
-  const u = new URL(minipay ? '/app' : '/app?connect=1', dashboardUrl);
+  minipay: MinipayLinkOpts = {}): string {
+  const isMiniPay = c.source === 'minipay' || c.from_minipay;
+  const u = new URL(isMiniPay ? '/app' : '/app?connect=1', dashboardUrl);
   u.searchParams.set('utm_source', c.source || 'direct');
   u.searchParams.set('utm_medium', 'email');
   u.searchParams.set('utm_campaign', campaign);
-  return minipay ? minipayBase + encodeURIComponent(u.toString()) : u.toString();
+  if (!isMiniPay) return u.toString();
+  return minipayCta(minipay) ?? u.toString();
 }
 
 /**
@@ -117,7 +131,7 @@ export function resendMailer(apiKey: string, fetchImpl: typeof fetch = fetch): M
 export type RunOpts = {
   campaign: string; send: boolean; only?: string; batch?: number;
   dashboardUrl: string; unsubscribeBaseUrl: string; unsubscribeSecret: string; from?: string;
-  templates: Templates; mailer?: Mailer; minipayBase?: string; now?: () => Date;
+  templates: Templates; mailer?: Mailer; minipayBase?: string; miniappId?: string; now?: () => Date;
 };
 export type RunResult = { eligible: number; sent: number; failed: number; dryRun: boolean };
 
@@ -127,7 +141,7 @@ export async function runCampaign(db: Db, o: RunOpts): Promise<RunResult> {
   const res: RunResult = { eligible: recipients.length, sent: 0, failed: 0, dryRun: !o.send };
   // Render everything first: a broken template throws before anything is sent.
   const msgs = recipients.map((c) => {
-    const vars = { cta_url: ctaUrl(c, o.dashboardUrl, o.campaign, o.minipayBase),
+    const vars = { cta_url: ctaUrl(c, o.dashboardUrl, o.campaign, { deeplinkBase: o.minipayBase, miniappId: o.miniappId }),
       unsubscribe_url: unsubscribeUrl(o.unsubscribeBaseUrl, c.id, o.unsubscribeSecret), first_line: '' };
     return { c, vars, html: render(o.templates.html, vars, true), text: renderText(o.templates.text, vars) };
   });

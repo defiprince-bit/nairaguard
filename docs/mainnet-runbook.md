@@ -53,6 +53,14 @@ pointing at Sepolia and labels every trade "Test swap". Without `AGENT_API_URL` 
 
 ## 3. Order of operations
 
+**Domain lock before register.** Custom domain must be live first (Vercel + DNS), then MiniPay Discover
+submission and Resend (sending domain DNS), then `register()`. The ERC-8004 `agentURI` is written on-chain
+and points at `/.well-known/agent.json` on whatever domain we use; listing the vercel.app address and
+switching later means a resubmit (and possibly a new Discover listing ID). After Discover approval, set
+`MINIPAY_MINIAPP_ID` so launch emails use `https://link.minipay.xyz/miniapp?id=<id>` instead of the plain
+dashboard URL. `verify:deploy` / `register:erc8004` refuse a vercel.app agentURI.
+
+
 All commands run from `agent/`. Every transaction carries the attribution tag `celo_9efd0f97b491` via the shared tx builder.
 
 1. **Deploy (tagged)** — owner-approved only:
@@ -67,7 +75,11 @@ All commands run from `agent/`. Every transaction carries the attribution tag `c
 4. **Owner acceptOwnership from MiniPay**: the owner calls `acceptOwnership()` from their own wallet. Nobody else can.
 5. **Verify after transfer**: `pnpm verify:deploy --factory <factory> --from-block <deployBlock> --after-transfer`
    → `owner()` is the owner's wallet and `pendingOwner()` is zero.
-6. **Register ERC-8004 (tagged)**: `pnpm register:erc8004` from the agent wallet on mainnet; set `ERC8004_ID` on `agent-mainnet`.
+6. **Domain live → MiniPay Discover + Resend → register** (do not reorder):
+   - Custom domain on Vercel; `DASHBOARD_URL` on Railway matches it.
+   - Owner submits MiniPay Discover (URL = custom domain); set `MINIPAY_MINIAPP_ID` when listed.
+   - Resend domain DNS for launch email.
+   - Then **Register ERC-8004 (tagged)**: `pnpm register:erc8004` from the agent wallet on mainnet; set `ERC8004_ID` on `agent-mainnet`.
 7. **Fund the agent wallet** with CELO for gas (target: by 28 Oct).
 8. **Set `TEXTILE_API_KEY`** on `agent-mainnet` and start/redeploy the service; check `/healthz` and `/api/vault/<vault>/status`.
 9. **First $1 trade**: owner creates a vault in MiniPay on the mainnet factory, deposits a small amount, and the agent's
