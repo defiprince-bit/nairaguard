@@ -19,7 +19,10 @@ contracts/broadcast/
 broadcast/
 out/
 cache/
-contracts/lib/
+# Keep forge-std submodule trackable; ignore other local libs if added later
+contracts/lib/*
+!contracts/lib/forge-std/
+!contracts/lib/forge-std/**
 # node builds
 dist/
 .next/
