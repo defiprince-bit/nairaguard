@@ -209,7 +209,7 @@ export function createApi(d: ApiDeps) {
     if (used.rows.length === 0) return json(401, { ok: false, error: 'siwe_nonce_invalid' });
     try {
       const r = await d.db.query(
-        `UPDATE waitlist SET wallet_address=$2, verified=true
+        `UPDATE waitlist SET wallet_address=$2, verified=true, verified_via=COALESCE(verified_via,'siwe')
          WHERE signup_token_hash=$1 AND (wallet_address IS NULL OR lower(wallet_address)=$2) RETURNING id`,
         [tokenHash, signer]);
       if (r.rows.length === 0) return json(409, { ok: false, error: 'wallet_mismatch' });

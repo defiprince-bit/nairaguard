@@ -43,5 +43,4 @@ jobs:
       - run: pnpm --filter ./${{ matrix.package }} lint
       - run: pnpm --filter ./${{ matrix.package }} build
       - name: Test
-        if: matrix.package == 'agent'
-        run: pnpm --filter ./agent test
+        run: pnpm --filter ./${{ matrix.package }} test

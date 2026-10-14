@@ -1,10 +1,11 @@
 import { createPublicClient, http } from 'viem';
 import { celo, celoSepolia } from 'viem/chains';
 import { createApi, serve } from './api.js';
-import { createChainPort } from './chain.js';
+import { createChainPorts } from './chain.js';
 import { ADDRESSES, ATTRIBUTION_TAG, NETWORK, RPC_URL, WAITLIST_CHAIN_ID, WAITLIST_RPC_URL } from './config.js';
 import { connect, migrate } from './db.js';
 import { runOnce } from './loop.js';
+import { listVaults, scanFactory } from './factory.js';
 import { MockRouterRateSource } from './textile.js';
 
 const INTERVAL_MS = Number(process.env.LOOP_INTERVAL_MS ?? 5 * 60_000);
@@ -21,12 +22,12 @@ async function main(): Promise<void> {
 
   const chain = NETWORK === 'celo' ? celo : celoSepolia;
   const publicClient = createPublicClient({ chain, transport: http(RPC_URL) });
-  const port = createChainPort({
+  if (/^0x0+$/.test(addrs.factory)) throw new Error('FACTORY_ADDRESS is required');
+  const port = createChainPorts({
     publicClient: publicClient as never,
     chain,
     rpcUrl: RPC_URL,
     privateKey: pk,
-    vault: addrs.vault,
     cngn: addrs.cngn,
     usdt: addrs.usdt,
   });
@@ -47,8 +48,9 @@ async function main(): Promise<void> {
     erc8004Id: process.env.ERC8004_ID,
     tokens: { cngn: addrs.cngn, usdt: addrs.usdt },
     readState: async (v) => {
-      if (v.toLowerCase() !== addrs.vault.toLowerCase()) throw new Error('unknown vault');
-      return port.readState();
+      const known = await listVaults(db, addrs.factory, addrs.chainId);
+      if (!known.some((k) => k.vault.toLowerCase() === v.toLowerCase())) throw new Error('unknown vault');
+      return port.forVault(v).readState();
     },
     siwe: { domain: new URL(dashboardUrl).host, uri: dashboardUrl, chainId: WAITLIST_CHAIN_ID, client: siweClient as never },
   });
@@ -57,10 +59,23 @@ async function main(): Promise<void> {
   console.log(`NairaGuard agent ${port.address} on ${NETWORK}, tag ${ATTRIBUTION_TAG}, every ${INTERVAL_MS}ms`);
   const tick = async () => {
     try {
-      const r = await runOnce({ vault: addrs.vault, cngn: addrs.cngn, usdt: addrs.usdt, chain: port, rates, db });
-      console.log(`[${new Date().toISOString()}] ${r.decision.action}${r.txHash ? ` tx=${r.txHash}` : ''} — ${r.decision.reason}`);
+      const s = await scanFactory({
+        db, client: publicClient as never, factory: addrs.factory, chainId: addrs.chainId,
+        startBlock: addrs.factoryStartBlock, chunk: BigInt(process.env.LOG_CHUNK ?? 5000),
+      });
+      if (s.created || s.deposits) console.log(`scan ${s.from}-${s.to}: +${s.created} vaults, +${s.deposits} first deposits`);
     } catch (e) {
-      console.error('tick failed:', (e as Error).message);
+      console.error('factory scan failed:', (e as Error).message);
+    }
+    const vaults = await listVaults(db, addrs.factory, addrs.chainId).catch(() => []);
+    // One vault failing never blocks the others.
+    for (const { vault } of vaults) {
+      try {
+        const r = await runOnce({ vault, cngn: addrs.cngn, usdt: addrs.usdt, chain: port.forVault(vault), rates, db });
+        console.log(`[${new Date().toISOString()}] ${vault} ${r.decision.action}${r.txHash ? ` tx=${r.txHash}` : ''} — ${r.decision.reason}`);
+      } catch (e) {
+        console.error(`tick failed for ${vault}:`, (e as Error).message);
+      }
     }
   };
   await tick();

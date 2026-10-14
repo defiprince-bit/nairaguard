@@ -1,7 +1,8 @@
 /**
- * One-off Celo Sepolia setup (testnet only). Run as the vault owner (deployer):
- *   NETWORK=celo-sepolia DEPLOYER_PRIVATE_KEY=... pnpm tsx scripts/seed-sepolia.ts
- * Fixes mock router rates (1 USD₮ = ₦1,500), deposits mock cNGN/USD₮, sets limits,
+ * One-off Celo Sepolia setup (testnet only). Run as the deployer (a test/team wallet):
+ *   NETWORK=celo-sepolia FACTORY_ADDRESS=0x... DEPLOYER_PRIVATE_KEY=... pnpm tsx scripts/seed-sepolia.ts
+ * Fixes mock router rates (1 USD₮ = ₦1,500), creates the deployer's vault via the factory (if missing),
+ * deposits mock cNGN/USD₮,
  * and tops up the agent with testnet CELO. All txs go through the tagged txBuilder.
  */
 import { createPublicClient, http, parseEther, parseUnits } from 'viem';
@@ -9,7 +10,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { celoSepolia } from 'viem/chains';
 import { ADDRESSES, NETWORK, RPC_URL } from '../src/config.js';
 import { buildContractCall, buildTransfer, createTxSender } from '../src/txBuilder.js';
-import { erc20Abi, mockRouterAbi, vaultAbi } from '../src/vaultAbi.js';
+import { erc20Abi, factoryAbi, mockRouterAbi, vaultAbi } from '../src/vaultAbi.js';
 
 if (NETWORK !== 'celo-sepolia') throw new Error('seed-sepolia is testnet only');
 const a = ADDRESSES['celo-sepolia']!;
@@ -33,18 +34,24 @@ const c = (address: `0x${string}`, abi: any, functionName: string, args: unknown
 
 await send('router rate cNGN', c(a.swapRouter, mockRouterAbi, 'setRate', [a.cngn, e18('1500')]));
 await send('router rate USDT', c(a.swapRouter, mockRouterAbi, 'setRate', [a.usdt, e18('1')]));
+const limits = { maxTradeUsd: e18('100'), maxDailyUsd: e18('500'), approvalThresholdUsd: e18('100'), maxSlippageBps: 100, targetNgnBps: 5000 };
+let vault = await pc.readContract({ address: a.factory, abi: factoryAbi, functionName: 'vaultOf', args: [sender.address] });
+if (/^0x0+$/.test(vault)) {
+  await send('createVault', c(a.factory, factoryAbi, 'createVault', [limits]));
+  // RPC nodes can lag a block behind the receipt; retry until vaultOf is visible.
+  for (let i = 0; i < 10 && /^0x0+$/.test(vault); i++) {
+    await new Promise((r) => setTimeout(r, 2000));
+    vault = await pc.readContract({ address: a.factory, abi: factoryAbi, functionName: 'vaultOf', args: [sender.address] });
+  }
+}
+if (/^0x0+$/.test(vault)) throw new Error('vaultOf still 0x0 after createVault');
+console.log('vault', vault);
 await send('mint cNGN', c(a.cngn, erc20Abi, 'mint', [sender.address, e18('300000')]));
 await send('mint USDT', c(a.usdt, erc20Abi, 'mint', [sender.address, e18('100')]));
-await send('approve cNGN', c(a.cngn, erc20Abi, 'approve', [a.vault, e18('300000')]));
-await send('approve USDT', c(a.usdt, erc20Abi, 'approve', [a.vault, e18('100')]));
-await send('deposit cNGN', c(a.vault, vaultAbi, 'deposit', [a.cngn, e18('300000')]));
-await send('deposit USDT', c(a.vault, vaultAbi, 'deposit', [a.usdt, e18('100')]));
-await send(
-  'setLimits',
-  c(a.vault, vaultAbi, 'setLimits', [
-    { maxTradeUsd: e18('100'), maxDailyUsd: e18('500'), approvalThresholdUsd: e18('100'), maxSlippageBps: 100, targetNgnBps: 5000 },
-  ]),
-);
+await send('approve cNGN', c(a.cngn, erc20Abi, 'approve', [vault, e18('300000')]));
+await send('approve USDT', c(a.usdt, erc20Abi, 'approve', [vault, e18('100')]));
+await send('deposit cNGN', c(vault, vaultAbi, 'deposit', [a.cngn, e18('300000')]));
+await send('deposit USDT', c(vault, vaultAbi, 'deposit', [a.usdt, e18('100')]));
 const bal = await pc.getBalance({ address: AGENT });
 if (bal < parseEther('0.1')) await send('fund agent CELO', buildTransfer(AGENT, parseEther('0.5')));
 console.log('seed done');

@@ -1,16 +1,24 @@
 {
   "network": "celo-sepolia",
   "chainId": 11142220,
-  "deployedAt": "2026-10-14T15:06:44Z",
-  "deployRun": "https://github.com/defiprince-bit/nairaguard/actions/runs/38586394401",
-  "commit": "da32310",
-  "supersedes": "0xA47F3e8b08a94D1933e2031416d54640A0BEF63B",
+  "deployedAt": "2026-10-14T17:26:00Z",
+  "deployRun": "local forge script (Task 8a)",
+  "supersedes": "0xD436aA344C0E2a58a607443680651a2c32066be6",
   "owner": "0x1ab29BDaAc75255501ADBBdcC2150fe4D346C0A7",
   "agent": "0xA2A173A481BC063fEE0EF11c67Fc756DC5f928f4",
   "contracts": {
-    "Vault": "0xD436aA344C0E2a58a607443680651a2c32066be6",
+    "VaultFactory": "0x4fa967c761eD1ddB642Fe62Fcb9aB7B924Df5310",
+    "VaultImplementation": "0x0C9c60D3ce78294A6845cC48F869bA0690E5D2aB",
+    "TestVault": "0x684C18e7938EC3D3b5945a76160732FDDFb23cA1",
     "MockCNGN": "0xaA3B7364E418deC4Fb147f1BD2d95A4022082aEA",
     "MockUSDT": "0xe123971ec3F56138766272B7b15Ee188fdD0eFf7",
     "MockSwapRouter": "0xd834aB4e7caDc62f2E27ab6755ED4B22F0461e86"
+  },
+  "factoryDeployBlock": 38714846,
+  "txs": {
+    "VaultImplementation": "0x46f48d0d217dc72e8f3149d24a54d06c1bf123348abf9680327dcb4b8610aebf",
+    "VaultFactory": "0x59533b630281c474df6f98e62db3f743a69dd9cd09d8518d8539f42c8bb58730",
+    "setRouter": "0xa79e277c3e83c7209b7c32cfce8b88ab7d53f1ccd977d03f981c4ae52c711f63",
+    "createVault": "0xb91d49c175e88a44ebd9700d142e1561fec4a485273651766dfab90d151d5ea1"
   }
 }

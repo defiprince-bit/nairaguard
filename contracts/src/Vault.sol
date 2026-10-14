@@ -14,6 +14,11 @@ interface ISwapRouter {
         returns (uint256 amountOut);
 }
 
+interface IVaultFactory {
+    function isRouter(address router) external view returns (bool);
+    function textileRouter() external view returns (address);
+}
+
 /// @title NairaGuard Vault
 /// @notice Holds cNGN/USD₮ and enforces agent spend limits. See docs/design.md §1.
 contract Vault {
@@ -40,10 +45,11 @@ contract Vault {
     address public owner;
     address public pendingOwner;
     address public agent;
-    address public textileRouter;
+    /// @notice Factory that created this vault; holds the Textile router allowlist.
+    address public factory;
+    bool private _initialized;
 
     mapping(address token => bool) public supported;
-    mapping(address router => bool) public swapRouters;
     mapping(uint256 id => Approval) public approvals;
     /// @dev USD notional for each proposal (needed to enforce daily limit at approve-time).
     mapping(uint256 id => uint256) public approvalUsdValue;
@@ -72,6 +78,7 @@ contract Vault {
     error ApprovalNotFound();
     error TransferFailed();
     error InvalidLimits();
+    error AlreadyInitialized();
 
     event Deposited(address indexed token, uint256 amount, address indexed from);
     event Withdrawn(address indexed token, uint256 amount, address indexed to);
@@ -88,7 +95,6 @@ contract Vault {
     event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
     event AgentUpdated(address indexed agent);
-    event SwapRouterUpdated(address indexed router, bool allowed);
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -96,19 +102,43 @@ contract Vault {
     }
 
     modifier onlyAgent() {
-        if (msg.sender != agent) revert NotAgent();
+        if (msg.sender != agent || msg.sender == address(0)) revert NotAgent();
         _;
     }
 
-    constructor(address _agent, address tokenA, address tokenB) {
-        if (_agent == address(0) || tokenA == address(0) || tokenB == address(0)) revert ZeroAddress();
-        owner = msg.sender;
+    /// @dev Locks the implementation so only clones can be initialized.
+    constructor() {
+        _initialized = true;
+    }
+
+    /// @notice One-time setup for a clone. `msg.sender` is recorded as the factory.
+    function initialize(address _owner, address _agent, address tokenA, address tokenB, Limits calldata initLimits)
+        external
+    {
+        if (_initialized) revert AlreadyInitialized();
+        if (_owner == address(0) || _agent == address(0) || tokenA == address(0) || tokenB == address(0)) {
+            revert ZeroAddress();
+        }
+        _initialized = true;
+        factory = msg.sender;
+        owner = _owner;
         agent = _agent;
-        emit OwnershipTransferred(address(0), msg.sender);
+        emit OwnershipTransferred(address(0), _owner);
         supported[tokenA] = true;
         supported[tokenB] = true;
         dayStart = block.timestamp;
         nextApprovalId = 1;
+        _setLimits(initLimits);
+    }
+
+    /// @notice Current Textile router, read from the factory allowlist.
+    function textileRouter() public view returns (address) {
+        return IVaultFactory(factory).textileRouter();
+    }
+
+    function _activeRouter() internal view returns (address router) {
+        router = IVaultFactory(factory).textileRouter();
+        if (router == address(0) || !IVaultFactory(factory).isRouter(router)) revert RouterNotAllowed();
     }
 
     function deposit(address token, uint256 amount) external onlyOwner {
@@ -128,6 +158,10 @@ contract Vault {
     }
 
     function setLimits(Limits calldata newLimits) external onlyOwner {
+        _setLimits(newLimits);
+    }
+
+    function _setLimits(Limits calldata newLimits) internal {
         if (newLimits.maxSlippageBps > BPS) revert InvalidLimits();
         if (newLimits.targetNgnBps > BPS) revert InvalidLimits();
         limits = newLimits;
@@ -140,21 +174,10 @@ contract Vault {
         );
     }
 
+    /// @notice Set or revoke (address(0)) the agent allowed to trade this vault.
     function setAgent(address newAgent) external onlyOwner {
-        if (newAgent == address(0)) revert ZeroAddress();
         agent = newAgent;
         emit AgentUpdated(newAgent);
-    }
-
-    function setSwapRouter(address router, bool allowed) external onlyOwner {
-        if (router == address(0)) revert ZeroAddress();
-        swapRouters[router] = allowed;
-        if (allowed) {
-            textileRouter = router;
-        } else if (textileRouter == router) {
-            textileRouter = address(0);
-        }
-        emit SwapRouterUpdated(router, allowed);
     }
 
     function pause() external onlyOwner {
@@ -254,7 +277,7 @@ contract Vault {
         if (tokenIn == tokenOut) revert TokenNotSupported();
         if (amountIn == 0) revert ZeroAmount();
         if (minOut == 0) revert ZeroAmount();
-        if (textileRouter == address(0) || !swapRouters[textileRouter]) revert RouterNotAllowed();
+        _activeRouter();
     }
 
     function _enforceTradeLimit(uint256 usdValue) internal view {
@@ -267,7 +290,7 @@ contract Vault {
     }
 
     function _enforceSlippage(address tokenIn, address tokenOut, uint256 amountIn, uint256 minOut) internal view {
-        uint256 quoted = ISwapRouter(textileRouter).quote(tokenIn, tokenOut, amountIn);
+        uint256 quoted = ISwapRouter(_activeRouter()).quote(tokenIn, tokenOut, amountIn);
         uint256 floor = (quoted * (BPS - limits.maxSlippageBps)) / BPS;
         if (minOut < floor) revert SlippageTooHigh();
     }
@@ -287,8 +310,7 @@ contract Vault {
         uint256 minOut,
         uint256 usdValue
     ) internal returns (uint256 amountOut) {
-        address router = textileRouter;
-        if (router == address(0) || !swapRouters[router]) revert RouterNotAllowed();
+        address router = _activeRouter();
 
         _rollDailyWindow();
         dailySpentUsd += usdValue;
