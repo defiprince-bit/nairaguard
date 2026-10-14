@@ -1,0 +1,112 @@
+# NairaGuard design
+
+The build spec for Cursor. Work through the **Build order** one task at a time; each task lists what "done" means.
+
+## What it is
+An AI agent that protects Nigerian freelancers and small businesses from naira losses. Users deposit cNGN and USD₮ into a vault on Celo. They set a target mix and limits. The agent watches the rate and rebalances by swapping on **Textile** (cNGN/USD₮ only), explaining every trade in plain English. The dashboard runs as a **MiniPay mini app**.
+
+Hackathon: Celo "Agents on Open Rails", Textile FX track. Deadline 9 Nov 2026, 10:00 WAT.
+
+```mermaid
+flowchart LR
+  U[User in MiniPay] -->|deposit / approve / set limits| V[(Vault contract)]
+  D[Dashboard - Next.js on Vercel] -->|reads| API[Agent API]
+  U --> D
+  A[Agent service - always-on host] -->|rates, balances| C[Celo RPC]
+  A -->|propose / execute swap| V
+  V -->|swap only via| T[Textile cNGN/USD₮]
+  A --> DB[(Postgres: activity, approvals, waitlist)]
+  API --> DB
+  TB[Shared tx builder: appends ATTRIBUTION_TAG] -.every tx.-> C
+```
+
+## Hard rules
+1. **Every transaction is tagged.** Agent and dashboard both send through one tx builder that appends `ATTRIBUTION_TAG` (`celo_9efd0f97b491`). A test fails if any tx is built without it.
+2. **The vault, not the agent, enforces limits.** If the agent key is compromised, it still can't exceed what the user set.
+3. **Swaps only through Textile.** The vault holds an allowlist of Textile contract addresses set by the owner.
+4. **Approvals expire on-chain.** An expired approval can never execute.
+5. **No secrets in the repo.** It's public.
+
+## Networks
+| | Chain id | RPC |
+|---|---|---|
+| Celo Sepolia (testnet) | 11142220 | https://forno.celo-sepolia.celo-testnet.org |
+| Celo mainnet | 42220 | https://forno.celo.org |
+
+Token and Textile addresses go in `agent/src/config.ts` per network. **TBD**: confirm Textile contract addresses, swap interface, and testnet availability with Textile (office hours Thursdays 12:00 GMT). Until then, Task 1 uses a mock swap router.
+
+## 1. Vault contract (`contracts/src/Vault.sol`)
+
+Roles: `owner` (the user), `agent` (agent wallet, set by owner).
+
+State
+- `mapping(address token => bool) supported` (cNGN, USD₮)
+- `mapping(address router => bool) swapRouters` (Textile only)
+- `Limits { uint256 maxTradeUsd; uint256 maxDailyUsd; uint256 approvalThresholdUsd; uint16 maxSlippageBps; uint16 targetNgnBps; }`
+- `dailySpentUsd`, `dayStart`
+- `Approval { address tokenIn; address tokenOut; uint256 amountIn; uint256 minOut; uint64 expiresAt; bool executed; }` keyed by id
+
+Functions
+- `deposit(token, amount)` / `withdraw(token, amount, to)` (owner only; withdraw always works, even when paused)
+- `setLimits(Limits)`, `setAgent(address)`, `setSwapRouter(address, bool)`, `pause()` / `unpause()` (owner)
+- `swap(tokenIn, tokenOut, amountIn, minOut, usdValue)` (agent): reverts if paused, router not allowed, over `maxTradeUsd`, over `maxDailyUsd`, or `usdValue >= approvalThresholdUsd`
+- `proposeSwap(...) returns (id)` (agent) for trades above the threshold; sets `expiresAt`
+- `approve(id)` (owner) executes it; reverts if expired or already executed
+- Events: `Deposited`, `Withdrawn`, `Swapped(id, tokenIn, tokenOut, amountIn, amountOut)`, `SwapProposed(id, expiresAt)`, `LimitsUpdated`, `Paused`
+
+Note: `usdValue` comes from the agent; the contract also checks `minOut` against `maxSlippageBps`. A price oracle check is a stretch goal.
+
+## 2. Agent service (`agent/`)
+
+Loop, every N minutes:
+1. Read cNGN/USD₮ rate (Textile quote) and vault balances.
+2. Compute current NGN share vs `targetNgnBps`. If drift > band (e.g. 5%), size a rebalance trade within limits.
+3. Write a plain-English reason, e.g. "Naira share was 72%, target 50%. Moved ₦400,000 to USD₮ at ₦1,520/$."
+4. Below threshold: `swap`. Above: `proposeSwap` and wait for the user.
+5. Record everything in Postgres.
+
+Modules: `config.ts`, `txBuilder.ts` (the only place that sends txs), `textile.ts`, `strategy.ts` (pure function, unit-tested), `loop.ts`, `api.ts`.
+
+Strategy must be sensible, not random: Textile FX judges on P&L, volume and originality.
+
+## 3. API (agent serves, dashboard reads)
+
+All amounts are strings (token base units). Every value has NGN and USD equivalents plus the rate used.
+
+```ts
+type Money = { token: 'cNGN' | 'USDT'; amount: string; amountNgn: string; amountUsd: string; rate: string; rateAt: string };
+
+GET  /api/vault/:address/balances  -> { balances: Money[]; ngnShareBps: number; targetNgnBps: number }
+GET  /api/vault/:address/activity  -> { items: { id: string; kind: 'swap'|'deposit'|'withdraw'; in?: Money; out?: Money; reason: string; txHash: string; status: 'pending'|'confirmed'|'failed'; at: string }[] }
+GET  /api/vault/:address/approvals -> { items: { id: string; in: Money; minOut: Money; reason: string; expiresAt: string }[] }
+GET  /api/vault/:address/limits    -> Limits
+GET  /api/agent                    -> { address: string; erc8004Id?: string; lastRunAt: string; healthy: boolean }
+POST /api/waitlist                 -> { ok: true }
+```
+
+Writes (approve, set limits, deposit, withdraw) are **signed by the user's wallet in MiniPay**, sent through the tx builder, not via the API.
+
+## 4. Data (Postgres)
+- `activity` (vault, kind, amounts, rate, reason, tx_hash, status, created_at)
+- `approvals` (vault, onchain_id, amounts, reason, expires_at, status)
+- `waitlist` (id, email, phone, wallet_address, wallet_verified bool, source, consent bool, created_at). `wallet_verified` is true only when the address came from MiniPay / a connected wallet. Only verified addresses count toward the independent-user check (active on Celo before 6 Oct). Never put signups in seeds or logs.
+
+## 5. MiniPay
+- Connect via the injected provider; the wallet address is the identity. No separate login.
+- Fees paid in stablecoin (fee currency) so users don't need CELO. **TBD**: confirm MiniPay's current requirements before Task 6.
+- HTTPS only (Vercel previews per PR).
+
+## 6. ERC-8004 and attribution
+- Agent wallet: `0xa2a173a481bc063fee0ef11c67fc756dc5f928f4`. Register its ERC-8004 identity from that wallet once funded (mainnet). **TBD**: registry address and call, from Hackathon bud.
+- Show the identity on the dashboard via `/api/agent`.
+
+## Build order (one Cursor task at a time)
+1. **Vault + tests.** Implement section 1 with a mock Textile router. Done when `forge test` covers: deposit/withdraw, every limit revert, router allowlist, propose/approve/expiry, pause. Deploy to Celo Sepolia.
+2. **Tx builder.** `agent/src/txBuilder.ts` appends `ATTRIBUTION_TAG`. Done when a test proves every built tx carries it.
+3. **Strategy.** Pure `strategy.ts` with unit tests for drift, sizing, limits.
+4. **Agent loop on Celo Sepolia** with Postgres activity log. Done when it makes and logs trades against the Sepolia vault.
+5. **API** per section 3, with tests.
+6. **Dashboard wiring** to the API following `docs/ui-spec.md`, MiniPay connect.
+7. **Loss-example script**: compute the real ₦ loss on ₦500,000 over last month from rate data for the waitlist page.
+8. **Textile integration**: swap mock router for real Textile once addresses are confirmed.
+9. **Mainnet**: deploy vault (owner approval), fund agent, register ERC-8004, first tagged trades. Target 28 Oct.
