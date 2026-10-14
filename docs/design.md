@@ -93,14 +93,16 @@ GET  /api/vault/:address/approvals -> { items: { id: string; in: Money; minOut: 
 GET  /api/vault/:address/limits    -> Limits
 GET  /api/agent                    -> { address: string; erc8004Id?: string; lastRunAt: string; healthy: boolean }
 GET  /api/waitlist/nonce?address=0x… -> { nonce; expiresAt; message? }   // one-time, 10 min, stored in Postgres
-POST /api/waitlist?source=…        { contact, consent, wallet?, fromMiniPay? } -> { ok: true; id; verified: false }
-POST /api/waitlist/verify          { id, message, signature } -> { ok: true; verified: true }   // SIWE (EIP-4361)
+POST /api/waitlist?source=…        { contact, consent, wallet?, fromMiniPay? } -> { ok: true; signupToken; verified: false }
+POST /api/waitlist/verify          { signupToken, message, signature } -> { ok: true; verified: true }   // SIWE (EIP-4361)
 ```
 
 `balances` also returns `pnlNgn`, `pnlUsd` (strings, 2dp) and `pnlSince` (ISO date the vault was first seen funded, or null).
 P&L = vault value now in ₦ − starting balances valued at the current rate (no trading). Real balances are used, so swap fees/slippage are already netted. Every agent tick logs a row in `quotes`; each confirmed swap also gets `fee_ngn` (value change across the swap at one rate) and `pnl_ngn` on its `activity` row.
 
 Waitlist verification: users can join without signing (`verified = false`). To verify, the client fetches a nonce, the wallet signs the SIWE message (domain = dashboard host, chain id, nonce, expiry), and `/verify` checks it with `viem/siwe` `verifySiweMessage`, consumes the nonce once (replays and expired messages are rejected), then sets `verified = true` and stores the recovered address.
+
+`signupToken` is 32 crypto-random bytes (hex), returned only once by `POST /api/waitlist`; the server stores only its sha256 (`signup_token_hash`). `/verify` finds the signup by that hash (never by a client-supplied id) and only updates it if `wallet_address` is null or already equals the signer (case-insensitive), otherwise `409 wallet_mismatch`. The client must keep the token from the join response and send it to `/verify`.
 
 Writes (approve, set limits, deposit, withdraw) are **signed by the user's wallet in MiniPay**, sent through the tx builder, not via the API.
 

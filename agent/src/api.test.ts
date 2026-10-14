@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createPublicClient, custom, parseUnits } from 'viem';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { createSiweMessage } from 'viem/siwe';
-import { createApi, normaliseSource } from './api.js';
+import { createApi, hashToken, normaliseSource } from './api.js';
 import { type Db, migrate } from './db.js';
 import type { VaultState } from './loop.js';
 import { computePnl, logQuote } from './pnl.js';
@@ -87,20 +87,21 @@ describe('waitlist (SIWE)', () => {
 
   async function join(a: ReturnType<typeof api>, body: object = base, url = '/api/waitlist') {
     const r = await a.handle({ method: 'POST', url, body });
-    return (r.body as { id: string }).id;
+    return (r.body as { signupToken: string }).signupToken;
   }
 
   it('joins unverified (source from ?source=, client verified flag ignored), then SIWE verifies', async () => {
     const a = api();
     const r = await a.handle({ method: 'POST', url: '/api/waitlist?source=celo-ng', body: { ...base, verified: true, fromMiniPay: true } });
     expect(r).toMatchObject({ status: 200, body: { ok: true, verified: false } });
-    const id = (r.body as { id: string }).id;
+    const id = (r.body as { signupToken: string }).signupToken;
+    expect(id).toMatch(/^[0-9a-f]{64}$/);
     await join(a, { contact: '+2348012345678', consent: true }, '/api/waitlist?source=evil');
     let { rows } = await db.query<any>('SELECT * FROM waitlist ORDER BY id');
     expect(rows[0]).toMatchObject({ verified: false, source: 'celo-ng', from_minipay: true });
     expect(rows[1]).toMatchObject({ verified: false, source: 'direct' });
 
-    const v = await a.handle({ method: 'POST', url: '/api/waitlist/verify', body: { id, ...(await signed(a)) } });
+    const v = await a.handle({ method: 'POST', url: '/api/waitlist/verify', body: { signupToken: id, ...(await signed(a)) } });
     expect(v).toMatchObject({ status: 200, body: { ok: true, verified: true } });
     ({ rows } = await db.query<any>('SELECT * FROM waitlist ORDER BY id'));
     expect(rows[0]).toMatchObject({ verified: true, wallet_address: acc.address.toLowerCase() });
@@ -110,9 +111,9 @@ describe('waitlist (SIWE)', () => {
     const a = api();
     const id = await join(a);
     const s = await signed(a);
-    expect((await a.handle({ method: 'POST', url: '/api/waitlist/verify', body: { id, ...s } })).status).toBe(200);
+    expect((await a.handle({ method: 'POST', url: '/api/waitlist/verify', body: { signupToken: id, ...s } })).status).toBe(200);
     const id2 = await join(a, { ...base, contact: 'b@example.com' });
-    const again = await a.handle({ method: 'POST', url: '/api/waitlist/verify', body: { id: id2, ...s } });
+    const again = await a.handle({ method: 'POST', url: '/api/waitlist/verify', body: { signupToken: id2, ...s } });
     expect(again).toMatchObject({ status: 401, body: { error: 'siwe_nonce_invalid' } });
   });
 
@@ -121,7 +122,7 @@ describe('waitlist (SIWE)', () => {
     const id = await join(a);
     const s = await signed(a);
     clock = new Date(clock.getTime() + 11 * 60_000);
-    const r = await a.handle({ method: 'POST', url: '/api/waitlist/verify', body: { id, ...s } });
+    const r = await a.handle({ method: 'POST', url: '/api/waitlist/verify', body: { signupToken: id, ...s } });
     expect(r).toMatchObject({ status: 401, body: { error: 'siwe_expired' } });
     const { rows } = await db.query<any>('SELECT verified FROM waitlist');
     expect(rows[0].verified).toBe(false);
@@ -135,11 +136,49 @@ describe('waitlist (SIWE)', () => {
       issuedAt: clock, expirationTime: new Date(clock.getTime() + 60_000),
     });
     const post = async (message: string, signer = acc) =>
-      (await a.handle({ method: 'POST', url: '/api/waitlist/verify', body: { id, message, signature: await signer.signMessage({ message }) } })).body;
+      (await a.handle({ method: 'POST', url: '/api/waitlist/verify', body: { signupToken: id, message, signature: await signer.signMessage({ message }) } })).body;
     expect(await post(mk(DOMAIN, 'deadbeefdeadbeef'))).toMatchObject({ error: 'siwe_nonce_invalid' });
     const { nonce } = (await a.handle({ method: 'GET', url: '/api/waitlist/nonce' })).body as { nonce: string };
     expect(await post(mk('evil.example', nonce))).toMatchObject({ error: 'siwe_bad_signature' });
     expect(await post(mk(DOMAIN, nonce), privateKeyToAccount(generatePrivateKey()))).toMatchObject({ error: 'siwe_bad_signature' });
+  });
+
+  it('stores only the sha256 of the signup token', async () => {
+    const a = api();
+    const t = await join(a);
+    const { rows } = await db.query<any>('SELECT * FROM waitlist');
+    expect(rows[0].signup_token_hash).toBe(hashToken(t));
+    expect(JSON.stringify(rows[0])).not.toContain(t);
+  });
+
+  it('rejects a missing or wrong signup token and does not burn the nonce', async () => {
+    const a = api();
+    const good = await join(a);
+    const s = await signed(a);
+    const post = (body: object) => a.handle({ method: 'POST', url: '/api/waitlist/verify', body });
+    expect(await post({ ...s })).toMatchObject({ status: 400, body: { error: 'signup_token_required' } });
+    expect(await post({ id: '1', ...s })).toMatchObject({ status: 400, body: { error: 'signup_token_required' } });
+    expect(await post({ signupToken: 'ab'.repeat(32), ...s })).toMatchObject({ status: 404, body: { error: 'signup_not_found' } });
+    const { rows } = await db.query<any>('SELECT verified FROM waitlist');
+    expect(rows[0].verified).toBe(false);
+    expect(await post({ signupToken: good, ...s })).toMatchObject({ status: 200 });
+  });
+
+  it("cannot overwrite another signup's wallet address", async () => {
+    const a = api();
+    const victim = privateKeyToAccount(generatePrivateKey()).address;
+    const t = await join(a, { ...base, wallet: victim });
+    const r = await a.handle({ method: 'POST', url: '/api/waitlist/verify', body: { signupToken: t, ...(await signed(a)) } });
+    expect(r).toMatchObject({ status: 409, body: { error: 'wallet_mismatch' } });
+    const { rows } = await db.query<any>('SELECT * FROM waitlist');
+    expect(rows[0]).toMatchObject({ wallet_address: victim.toLowerCase(), verified: false });
+  });
+
+  it('verifies when the stored wallet matches the signer (case-insensitive)', async () => {
+    const a = api();
+    const t = await join(a, { ...base, wallet: acc.address });
+    const r = await a.handle({ method: 'POST', url: '/api/waitlist/verify', body: { signupToken: t, ...(await signed(a)) } });
+    expect(r).toMatchObject({ status: 200, body: { verified: true } });
   });
 
   it('normalises sources', () => {

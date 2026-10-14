@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { type Client, formatUnits, isAddress } from 'viem';
 import { createSiweMessage, parseSiweMessage, verifySiweMessage } from 'viem/siwe';
 import type { Db } from './db.js';
@@ -9,6 +9,8 @@ import { computePnl, getBaseline } from './pnl.js';
 /** design.md §4 source allowlist. */
 export const WAITLIST_SOURCES = new Set(['x', 'celo-ng', 'celo-africa-dao', 'minipay', 'whatsapp-freelancers', 'referral']);
 export const normaliseSource = (s: string | null | undefined) => (s && WAITLIST_SOURCES.has(s) ? s : 'direct');
+
+export const hashToken = (t: string) => createHash('sha256').update(t).digest('hex');
 
 const NONCE_TTL_MS = 10 * 60_000;
 
@@ -163,12 +165,14 @@ export function createApi(d: ApiDeps) {
       wallet = b.wallet.toLowerCase();
     }
     // Any client-sent verified flag is ignored (design.md §4).
+    // Secret returned once; only its hash is stored. Required to verify this signup.
+    const signupToken = randomBytes(32).toString('hex');
     try {
-      const r = await d.db.query<{ id: string }>(
-        `INSERT INTO waitlist (email, phone, wallet_address, verified, from_minipay, source, consent)
-         VALUES ($1,$2,$3,false,$4,$5,true) RETURNING id`,
-        [isEmail ? contact : null, isEmail ? null : contact, wallet, b.fromMiniPay === true, source]);
-      return json(200, { ok: true, id: String(r.rows[0]!.id), verified: false });
+      await d.db.query(
+        `INSERT INTO waitlist (email, phone, wallet_address, verified, from_minipay, source, consent, signup_token_hash)
+         VALUES ($1,$2,$3,false,$4,$5,true,$6)`,
+        [isEmail ? contact : null, isEmail ? null : contact, wallet, b.fromMiniPay === true, source, hashToken(signupToken)]);
+      return json(200, { ok: true, signupToken, verified: false });
     } catch (e) {
       if (/unique|duplicate/i.test((e as Error).message)) return json(409, { ok: false, error: 'already_joined' });
       throw e;
@@ -178,7 +182,10 @@ export function createApi(d: ApiDeps) {
   /** SIWE: prove wallet ownership for an existing signup; only then verified = true. */
   async function verify(body: unknown) {
     const b = (body ?? {}) as Record<string, unknown>;
-    if (typeof b.id !== 'string' || !/^\d+$/.test(b.id)) return json(400, { ok: false, error: 'id_required' });
+    if (typeof b.signupToken !== 'string' || !/^[0-9a-f]{64}$/.test(b.signupToken)) {
+      return json(400, { ok: false, error: 'signup_token_required' });
+    }
+    const tokenHash = hashToken(b.signupToken);
     if (typeof b.message !== 'string' || typeof b.signature !== 'string') return json(400, { ok: false, error: 'siwe_required' });
     let parsed;
     try { parsed = parseSiweMessage(b.message); } catch { return json(400, { ok: false, error: 'siwe_invalid' }); }
@@ -189,6 +196,12 @@ export function createApi(d: ApiDeps) {
       message: b.message, signature: b.signature as `0x${string}`, domain: d.siwe.domain, nonce: parsed.nonce, time: now(),
     }).catch(() => false);
     if (!ok) return json(401, { ok: false, error: 'siwe_bad_signature' });
+    const signer = parsed.address.toLowerCase();
+    const row = await d.db.query<{ wallet_address: string | null }>(
+      'SELECT wallet_address FROM waitlist WHERE signup_token_hash=$1', [tokenHash]);
+    if (row.rows.length === 0) return json(404, { ok: false, error: 'signup_not_found' });
+    const existing = row.rows[0]!.wallet_address;
+    if (existing && existing.toLowerCase() !== signer) return json(409, { ok: false, error: 'wallet_mismatch' });
     // Consume the nonce atomically: one use only, never after expiry.
     const used = await d.db.query(
       `UPDATE waitlist_nonces SET used_at=$2 WHERE nonce=$1 AND used_at IS NULL AND expires_at > $2 RETURNING nonce`,
@@ -196,9 +209,10 @@ export function createApi(d: ApiDeps) {
     if (used.rows.length === 0) return json(401, { ok: false, error: 'siwe_nonce_invalid' });
     try {
       const r = await d.db.query(
-        `UPDATE waitlist SET wallet_address=$2, verified=true WHERE id=$1 RETURNING id`,
-        [b.id, parsed.address.toLowerCase()]);
-      if (r.rows.length === 0) return json(404, { ok: false, error: 'signup_not_found' });
+        `UPDATE waitlist SET wallet_address=$2, verified=true
+         WHERE signup_token_hash=$1 AND (wallet_address IS NULL OR lower(wallet_address)=$2) RETURNING id`,
+        [tokenHash, signer]);
+      if (r.rows.length === 0) return json(409, { ok: false, error: 'wallet_mismatch' });
     } catch (e) {
       if (/unique|duplicate/i.test((e as Error).message)) return json(409, { ok: false, error: 'wallet_already_used' });
       throw e;
