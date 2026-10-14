@@ -116,3 +116,98 @@ export function groupByDay(items: ActivityItem[], now = new Date()): { label: st
 export function lastCheck(perVault: string | null | undefined, globalRun: string | null | undefined) {
   return perVault || globalRun || null;
 }
+
+// ---- Task 8b ----
+
+const rateText = (r: number) => `₦${r.toLocaleString('en-US', { maximumFractionDigits: 0 })}/$`;
+
+/**
+ * The user's limit in ₦ per $1 from the approval's floor (approvedMinOut, else minOut).
+ * Uses the ₦ leg (cNGN is 1:1 naira) and the $ leg (USD₮ ≈ $1), so no token decimals are needed.
+ */
+export function floorRate(a: Pick<ApprovalItem, 'in' | 'minOut' | 'approvedMinOut'>): number | null {
+  const scale = (() => {
+    if (!a.approvedMinOut || a.approvedMinOut === a.minOut.amount) return 1;
+    try { const b = Number(BigInt(a.minOut.amount)); return b > 0 ? Number(BigInt(a.approvedMinOut)) / b : 1; } catch { return 1; }
+  })();
+  let ngn: number, usd: number;
+  if (a.in.token === 'cNGN') { ngn = Number(a.in.amountNgn); usd = Number(a.minOut.amountUsd) * scale; }
+  else { ngn = Number(a.minOut.amountNgn) * scale; usd = Number(a.in.amountUsd); }
+  if (a.in.amountNgn == null && a.in.token === 'cNGN') return null;
+  const r = ngn / usd;
+  return Number.isFinite(r) && r > 0 ? r : null;
+}
+
+export type ApprovalView = { state: 'pending' | 'approved' | 'executed' | 'expired' | 'rejected'; line: string; tone: 'warn' | 'brand' | 'muted' };
+
+/** One line per approval state (Approvals card + Overview banner). Expired is neutral, never an error. */
+export function approvalView(a: ApprovalItem, now = Date.now()): ApprovalView {
+  const raw = a.status ?? 'pending';
+  const left = msLeft(a.expiresAt, now);
+  const state = (raw === 'pending' || raw === 'approved') && left <= 0 ? 'expired' : raw;
+  const f = floorRate(a);
+  const lim = f ? rateText(f) : null;
+  const toUsd = a.minOut.token === 'USDT';
+  switch (state) {
+    case 'pending': {
+      const usd = a.in.amountUsd != null ? `~$${Number(a.in.amountUsd).toFixed(0)}` : tokenUnits(a.in);
+      return { state, tone: 'warn', line: `Swap ${usd} to ${toUsd ? 'USD₮' : 'cNGN'}${lim ? ` · at ${lim} or better` : ' · Rate unavailable'}` };
+    }
+    case 'approved':
+      return { state, tone: 'brand', line: `Approved · trading within ${formatCountdown(left)}${lim ? ` at ${lim} or better` : ''}` };
+    case 'executed': {
+      const r = Number(a.rateNgnPerUsd);
+      return { state, tone: 'brand', line: Number.isFinite(r) && r > 1 ? `Traded at ${rateText(r)}` : 'Traded' };
+    }
+    case 'expired':
+      return { state, tone: 'muted', line: a.approvedAt ? "Didn't trade, price never reached your limit" : 'Expired, nothing was traded' };
+    default:
+      return { state: 'rejected', tone: 'muted', line: rejectedLabel(a.rejectedAt) };
+  }
+}
+
+export const APPROVE_HELPER = 'Approving gives the agent 30 minutes to trade at your limit or better. If the price never gets there, nothing trades.';
+
+/** "via Textile FX" / "via Celo pool" / "via <label>"; Sepolia → "Test swap (mock exchange)". */
+export function venueLine(venue: string | null | undefined, network = process.env.NEXT_PUBLIC_NETWORK): string | null {
+  if (network !== 'celo') return venue === undefined ? null : 'Test swap (mock exchange)';
+  if (!venue) return null;
+  const v = venue.toLowerCase();
+  if (v === 'textile' || v === 'textile-fx') return 'via Textile FX';
+  if (v.includes('pool') || v === 'celo-pool' || v === 'dex') return 'via Celo pool';
+  return `via ${venue}`;
+}
+
+/** Quote outcomes shown quietly (never as errors). Unknown → null. */
+export function quoteOutcomeLine(outcome: string | null | undefined): string | null {
+  if (outcome === 'price_moved') return "Price moved, didn't trade";
+  if (outcome === 'no_quote') return 'No offer from the exchange right now. Will try again next check.';
+  return null;
+}
+
+/** "Official rate ₦1,330/$ · updated 3 min ago". */
+export function officialRateLine(feedRate: string | null | undefined, updatedAt?: string | null, now = Date.now()): string | null {
+  const r = Number(feedRate);
+  if (!feedRate || !Number.isFinite(r) || r <= 0) return null;
+  let when = '';
+  if (updatedAt) {
+    const mins = Math.round((now - new Date(updatedAt).getTime()) / 60_000);
+    if (Number.isFinite(mins)) when = mins < 60 ? ` · updated ${Math.max(1, mins)} min ago` : ` · updated ${Math.round(mins / 60)}h ago`;
+  }
+  return `Official rate ${rateText(r)}${when}`;
+}
+
+export const STALE_PRICE = 'Paused, waiting for a fresh naira price.';
+export const OWNER_PAUSED = 'Paused by you. The agent won\u2019t trade until you unpause.';
+export function pausedLine(p: 'owner' | 'stale_price' | null | undefined): string | null {
+  return p === 'stale_price' ? STALE_PRICE : p === 'owner' ? OWNER_PAUSED : null;
+}
+
+export const MIN_TRADE_USD = 1;
+export const MIN_TRADE_HINT = 'Smallest trade is about $1.';
+export function perTradeError(v: string): string | null {
+  const n = Number(v);
+  if (v.trim() === '' || !Number.isFinite(n)) return 'Enter an amount in dollars.';
+  if (n < MIN_TRADE_USD) return MIN_TRADE_HINT;
+  return null;
+}

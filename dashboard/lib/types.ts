@@ -21,6 +21,8 @@ export type ActivityItem = {
   amountOut?: Money | string | null;
   /** Task 8b: venue from the vault's on-chain Swapped.target ("textile", a pool label; "textile-mock" on Sepolia). */
   venue?: string | null;
+  /** Not in the API yet: RFQ outcome for a no-trade check ("price_moved" | "no_quote"). Shown quietly. */
+  outcome?: string | null;
 };
 
 export type ApprovalItem = {

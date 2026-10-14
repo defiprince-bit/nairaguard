@@ -5,7 +5,7 @@ import { AmountText } from './AmountText';
 import { Button } from './Button';
 import { StatusChip } from './StatusChip';
 import { REJECT_HELPER } from '../lib/approve';
-import { approvalRate, countdownA11y, formatCountdown, msLeft, rejectedLabel, tokenUnits, txUrl } from '../lib/format';
+import { APPROVE_HELPER, approvalRate, approvalView, countdownA11y, formatCountdown, msLeft, rejectedLabel, tokenUnits, txUrl } from '../lib/format';
 import type { ApprovalItem, Money } from '../lib/types';
 
 export type TxState =
@@ -35,13 +35,14 @@ export function ApprovalCard({
     return () => clearInterval(t);
   }, []);
   const left = msLeft(item.expiresAt, now);
-  // Task 8b: approved = waiting for the agent to run it (UI/UX's full states land separately).
-  const settled = item.status === 'approved' || item.status === 'executed';
-  const expired = left <= 0 || item.status === 'expired';
+  // Task 8b: approve opens a 30-min window; the agent trades only at the floor or better.
+  const view = approvalView(item, now);
+  const settled = view.state === 'approved' || view.state === 'executed';
+  const expired = view.state === 'expired';
   const rate = approvalRate(item);
   const busy = tx.kind === 'waiting';
   const rejected = tx.kind === 'rejected' || item.status === 'rejected';
-  const done = tx.kind === 'ok' || rejected || settled;
+  const done = tx.kind === 'ok' || rejected || settled || expired;
   const dir = `${item.in.token === 'cNGN' ? '₦' : '$'} → ${item.minOut.token === 'cNGN' ? '₦' : '$'}`;
 
   return (
@@ -58,7 +59,7 @@ export function ApprovalCard({
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
         <strong className="h2" style={{ margin: 0, fontSize: 15 }}>Swap {dir}</strong>
-        <StatusChip status={tx.kind === 'ok' || settled ? 'executed' : rejected ? 'rejected' : expired ? 'expired' : 'pending'} />
+        <StatusChip status={tx.kind === 'ok' || view.state === 'approved' ? 'approved' : view.state === 'executed' ? 'executed' : rejected ? 'rejected' : expired ? 'expired' : 'pending'} />
       </div>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <Amount m={item.in} rate={rate} />
@@ -68,7 +69,14 @@ export function ApprovalCard({
       {rate === null ? (
         <p className="small" style={{ margin: 0, color: 'var(--warn)' }}>Rate unavailable</p>
       ) : null}
+      {!rejected ? (
+        <p className="small tabular" role="status" style={{ margin: 0, fontWeight: 600, color: view.tone === 'brand' ? 'var(--brand)' : view.tone === 'warn' ? 'var(--ink)' : 'var(--ink-muted)' }}>
+          {view.line}
+          {view.state === 'executed' && item.executedTx ? <> · <a href={txUrl(item.executedTx)} target="_blank" rel="noreferrer">View on explorer ↗</a></> : null}
+        </p>
+      ) : null}
       <p className="small" style={{ margin: 0, color: 'var(--ink)' }}>{item.reason}</p>
+      {!done && !expired ? <p className="small" style={{ margin: 0, color: 'var(--ink-muted)' }}>{APPROVE_HELPER}</p> : null}
       {rejected ? (
         <p role="status" className="small" style={{ margin: 0, color: 'var(--ink-muted)', fontWeight: 600 }}>
           {rejectedLabel(tx.kind === 'rejected' ? new Date(now).toISOString() : item.rejectedAt)}
@@ -98,7 +106,7 @@ export function ApprovalCard({
       ) : null}
       {tx.kind === 'ok' ? (
         <p role="status" className="small" style={{ margin: 0, color: 'var(--brand)', fontWeight: 600 }}>
-          Approved ✓ ·{' '}
+          Approved ✓ · trading window open for 30 min ·{' '}
           <a href={txUrl(tx.hash)} target="_blank" rel="noreferrer">View on explorer ↗</a>
         </p>
       ) : null}
