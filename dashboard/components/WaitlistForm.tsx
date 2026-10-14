@@ -110,7 +110,8 @@ export function WaitlistForm() {
   /** Optional step after joining: prove the MiniPay wallet is theirs (SIWE). Cancelling keeps them on the list, unverified. */
   async function verifyWallet() {
     const eth = typeof window !== 'undefined' ? window.ethereum : undefined;
-    if (!eth || !wallet || !signupToken) return;
+    // Never run nonce/verify inside MiniPay.
+    if (!eth || eth.isMiniPay || isMiniPay || !wallet || !signupToken) return;
     setVerifyState('signing');
     setVerifyCode(null);
     const fail = (code: string) => {
@@ -189,10 +190,17 @@ export function WaitlistForm() {
         <h2 className="h2" style={{ margin: 0 }}>
           You&apos;re on the list
         </h2>
-        <p className="small" style={{ margin: 0, color: 'var(--ink-muted)' }}>
-          We&apos;ll ping you when NairaGuard opens inside MiniPay.
-        </p>
-        {isMiniPay && wallet && signupToken && verifyState !== 'verified' ? (
+        {isMiniPay ? (
+          <p className="small" role="status" style={{ margin: 0, color: 'var(--brand)', fontWeight: 600 }}>
+            You&apos;re on the list ✓. We&apos;ll message you when deposits open.
+          </p>
+        ) : (
+          <p className="small" style={{ margin: 0, color: 'var(--ink-muted)' }}>
+            We&apos;ll ping you when NairaGuard opens inside MiniPay.
+          </p>
+        )}
+        {/* Never show the wallet-confirm (nonce/verify) step inside MiniPay. */}
+        {!isMiniPay && wallet && signupToken && verifyState !== 'verified' ? (
           <div
             style={{
               padding: 14,
