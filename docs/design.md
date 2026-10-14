@@ -92,17 +92,24 @@ GET  /api/vault/:address/activity  -> { items: { id: string; kind: 'swap'|'depos
 GET  /api/vault/:address/approvals -> { items: { id: string; in: Money; minOut: Money; reason: string; expiresAt: string }[] }
 GET  /api/vault/:address/limits    -> Limits
 GET  /api/agent                    -> { address: string; erc8004Id?: string; lastRunAt: string; healthy: boolean }
-POST /api/waitlist                 -> { ok: true }
+GET  /api/waitlist/nonce?address=0x… -> { nonce; expiresAt; message? }   // one-time, 10 min, stored in Postgres
+POST /api/waitlist?source=…        { contact, consent, wallet?, fromMiniPay? } -> { ok: true; id; verified: false }
+POST /api/waitlist/verify          { id, message, signature } -> { ok: true; verified: true }   // SIWE (EIP-4361)
 ```
+
+`balances` also returns `pnlNgn`, `pnlUsd` (strings, 2dp) and `pnlSince` (ISO date the vault was first seen funded, or null).
+P&L = vault value now in ₦ − starting balances valued at the current rate (no trading). Real balances are used, so swap fees/slippage are already netted. Every agent tick logs a row in `quotes`; each confirmed swap also gets `fee_ngn` (value change across the swap at one rate) and `pnl_ngn` on its `activity` row.
+
+Waitlist verification: users can join without signing (`verified = false`). To verify, the client fetches a nonce, the wallet signs the SIWE message (domain = dashboard host, chain id, nonce, expiry), and `/verify` checks it with `viem/siwe` `verifySiweMessage`, consumes the nonce once (replays and expired messages are rejected), then sets `verified = true` and stores the recovered address.
 
 Writes (approve, set limits, deposit, withdraw) are **signed by the user's wallet in MiniPay**, sent through the tx builder, not via the API.
 
 ## 4. Data (Postgres)
 - `activity` (vault, kind, amounts, rate, reason, tx_hash, status, created_at)
 - `approvals` (vault, onchain_id, amounts, reason, expires_at, status)
-- `waitlist` (id, email, phone, wallet_address, wallet_verified bool, source, consent bool, created_at).
+- `waitlist` (id, email, phone, wallet_address, verified bool, from_minipay bool, source, consent bool, created_at).
   - **source allowlist:** `x`, `celo-ng`, `celo-africa-dao`, `minipay`, `whatsapp-freelancers`, `referral`. Anything else, or missing, stores as `direct`.
-  - **wallet_verified:** the client must never send a verified flag. Store the address plus whether it came from MiniPay. Real verification is Task 5: the user signs a short message in MiniPay and the server recovers the signer; only then set `wallet_verified = true`. Only verified addresses count toward the independent-user check (active on Celo before 6 Oct). Never put signups in seeds or logs.
+  - **verified:** the client must never send a verified flag. Store the address plus whether it came from MiniPay. Real verification is Task 5: the user signs a short message in MiniPay and the server recovers the signer; only then set `verified = true`. Only verified addresses count toward the independent-user check (active on Celo before 6 Oct). Never put signups in seeds or logs.
 
 ## 5. MiniPay
 - Connect via the injected provider; the wallet address is the identity. No separate login.

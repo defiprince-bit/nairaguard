@@ -1,6 +1,7 @@
 import { type Hex, type Log, decodeEventLog, formatUnits, parseUnits } from 'viem';
 import { type Db, hasPendingApproval, insertActivity, insertApproval, recordRun } from './db.js';
 import { decide, type StrategyDecision } from './strategy.js';
+import { logQuote, valueNgn } from './pnl.js';
 import type { RateSource } from './textile.js';
 import { buildContractCall, type TaggedTx } from './txBuilder.js';
 import { vaultAbi } from './vaultAbi.js';
@@ -52,6 +53,7 @@ export async function runOnce(d: LoopDeps): Promise<RunResult> {
   const now = d.now?.() ?? new Date();
   try {
     const [s, rate] = await Promise.all([d.chain.readState(), d.rates.getRateNgnPerUsd()]);
+    await logQuote(d.db, d.vault, s.ngnBalance, s.usdBalance, rate, now);
     const nowSec = BigInt(Math.floor(now.getTime() / 1000));
     const dailySpent = nowSec >= s.dayStart + DAY ? 0n : s.dailySpentUsd;
 
@@ -114,6 +116,16 @@ export async function runOnce(d: LoopDeps): Promise<RunResult> {
       txHash: r.hash,
       status,
     });
+
+    if (decision.action === 'swap' && status === 'confirmed') {
+      // Per-swap P&L: value change across the swap at the same rate (fees + slippage).
+      const after = await d.chain.readState();
+      const fee = valueNgn(after.ngnBalance, after.usdBalance, rate) - valueNgn(s.ngnBalance, s.usdBalance, rate);
+      const p = await logQuote(d.db, d.vault, after.ngnBalance, after.usdBalance, rate, now);
+      await d.db.query(
+        `UPDATE activity SET fee_ngn=$1, pnl_ngn=$2 WHERE id=(SELECT max(id) FROM activity WHERE vault=$3 AND tx_hash=$4)`,
+        [String(fee), String(p.pnlNgn), d.vault, r.hash]);
+    }
 
     if (decision.action === 'propose' && r.status === 'success') {
       for (const log of r.logs) {

@@ -23,6 +23,16 @@ function isAddress(v: string) {
 }
 
 export async function POST(req: NextRequest) {
+  // When the agent API is deployed, forward there (it persists + handles SIWE verify).
+  const upstream = process.env.AGENT_API_URL;
+  if (upstream) {
+    const r = await fetch(`${upstream}/api/waitlist${req.nextUrl.search}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: await req.text(),
+    });
+    return new NextResponse(await r.text(), { status: r.status, headers: { 'content-type': 'application/json' } });
+  }
   let body: unknown;
   try {
     body = await req.json();

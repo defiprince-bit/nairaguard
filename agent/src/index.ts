@@ -1,5 +1,6 @@
 import { createPublicClient, http } from 'viem';
 import { celo, celoSepolia } from 'viem/chains';
+import { createApi, serve } from './api.js';
 import { createChainPort } from './chain.js';
 import { ADDRESSES, ATTRIBUTION_TAG, NETWORK, RPC_URL } from './config.js';
 import { connect, migrate } from './db.js';
@@ -32,6 +33,21 @@ async function main(): Promise<void> {
   const rates = new MockRouterRateSource(publicClient as never, addrs.swapRouter, addrs.usdt, addrs.cngn);
   const db = await connect();
   await migrate(db);
+
+  const apiPort = Number(process.env.PORT ?? 8080);
+  const dashboardUrl = process.env.DASHBOARD_URL ?? 'https://nairaguard-vert.vercel.app';
+  const api = createApi({
+    db,
+    agentAddress: port.address,
+    erc8004Id: process.env.ERC8004_ID,
+    tokens: { cngn: addrs.cngn, usdt: addrs.usdt },
+    readState: async (v) => {
+      if (v.toLowerCase() !== addrs.vault.toLowerCase()) throw new Error('unknown vault');
+      return port.readState();
+    },
+    siwe: { domain: new URL(dashboardUrl).host, uri: dashboardUrl, chainId: addrs.chainId, client: publicClient as never },
+  });
+  if (!ONCE) serve(api, apiPort, dashboardUrl);
 
   console.log(`NairaGuard agent ${port.address} on ${NETWORK}, tag ${ATTRIBUTION_TAG}, every ${INTERVAL_MS}ms`);
   const tick = async () => {
