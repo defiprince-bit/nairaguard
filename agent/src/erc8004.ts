@@ -20,3 +20,19 @@ export function buildRegisterTx(registry: `0x${string}`, agentURI: string): Tagg
   assertTagged(tx.data);
   return tx;
 }
+
+/**
+ * Guard before registering: the on-chain agentURI is permanent-ish, so it must live on the production domain
+ * (never a *.vercel.app preview/default host) and on the same host as DASHBOARD_URL.
+ */
+export function assertAgentUri(agentUri: string, dashboardUrl: string | undefined): void {
+  const a = new URL(agentUri);
+  if (/vercel\.app$/i.test(a.host) || agentUri.toLowerCase().includes('vercel.app')) {
+    throw new Error(`agentURI ${agentUri} is on vercel.app; set DASHBOARD_URL/AGENT_URI to the production domain`);
+  }
+  if (!dashboardUrl) throw new Error('DASHBOARD_URL is required so agentURI can be checked against it');
+  const d = new URL(dashboardUrl);
+  if (d.host.toLowerCase() !== a.host.toLowerCase()) {
+    throw new Error(`agentURI host ${a.host} differs from DASHBOARD_URL host ${d.host}`);
+  }
+}

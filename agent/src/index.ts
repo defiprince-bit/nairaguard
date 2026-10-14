@@ -79,6 +79,7 @@ async function main(): Promise<void> {
       if (!known.some((k) => k.vault.toLowerCase() === v.toLowerCase())) throw new Error('unknown vault');
       return port.forVault(v).readState();
     },
+    unsubscribeSecret: process.env.UNSUBSCRIBE_SECRET || undefined,
     siwe: { domain: new URL(dashboardUrl).host, uri: dashboardUrl, chainId: WAITLIST_CHAIN_ID, client: siweClient as never },
   });
   if (!ONCE) serve(api, apiPort, dashboardUrl);

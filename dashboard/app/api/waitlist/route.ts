@@ -1,13 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+// Single source of truth shared with the agent API (agent/src/waitlistSources.ts).
+import { normaliseSource } from '../../../../agent/src/waitlistSources';
 
-const ALLOWED_SOURCES = new Set([
-  'x',
-  'celo-ng',
-  'celo-africa-dao',
-  'minipay',
-  'whatsapp-freelancers',
-  'referral',
-]);
 
 function isEmail(v: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
@@ -79,7 +73,7 @@ export async function POST(req: NextRequest) {
   }
 
   // source is normalised; we do not persist or log PII in this mock.
-  void (typeof rawSource === 'string' && ALLOWED_SOURCES.has(rawSource) ? rawSource : 'direct');
+  void normaliseSource(rawSource);
 
   return NextResponse.json({ ok: true });
 }
