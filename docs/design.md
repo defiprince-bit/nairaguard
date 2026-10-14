@@ -220,6 +220,12 @@ Textile FX is RFQ: the agent POSTs `/v2/rfq/request` with `taker = vault` and ge
 
 Fallback: if the feed is dead, the **factory owner** (not the agent) can switch on a manual reference rate with its own max age. A compromised agent key can never set its own floor.
 
+
+### Venues (update 14 Oct)
+- The function is `swapViaRfq`. The factory allowlists **(target, spender) pairs**, and a mismatched pair reverts. Textile's taker side uses a plain `transferFrom` (no Permit2, no EIP-1271), and its spender is the reactor or `VaultOrderExecutor`.
+- `Swapped` also emits `target`. The API's `venue` (`textile` or a pool name) comes from that on-chain target through the factory's label for the pair, never from the agent's own report.
+- Backup: if Textile has no cNGN liquidity, a Celo DEX pool for cNGN/USDT with real depth can be allowlisted without a vault redeploy. The same checks, floor and limits apply. This keeps the product working but doesn't score on the Textile track.
+
 ### Approvals
 `proposeSwap` stores `amountIn` and `approvedMinOut`. `approve(id)` starts a window of `approvalWindow` (start 30 min) ending at `expiresAt`. During that window the agent may run it once with a fresh quote meeting the floor. After `expiresAt` it's `Expired`. `reject(id)` is unchanged.
 
