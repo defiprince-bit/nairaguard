@@ -5,6 +5,7 @@ import { parseUnits } from 'viem';
 import { Button } from './Button';
 import { InlineMessage } from './InlineMessage';
 import { type FriendlyError, friendlyError } from '../lib/errors';
+import { type CreateResult, recheckCreate, runCreate } from '../lib/createVault';
 import {
   DEFAULT_PRESET, PRESETS, type PresetId, buildApprove, buildCreateVault, buildDeposit, factoryTokens, lookupVault,
   presetLimits, sendTx, waitForReceipt,
@@ -28,23 +29,47 @@ export function CreateVaultStep({
   const [target, setTarget] = useState(50);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<FriendlyError | null>(null);
+  const [note, setNote] = useState<{ kind: 'exists' | 'pending'; message: string } | null>(null);
+  const [pendingHash, setPendingHash] = useState<`0x${string}` | null>(null);
+  const pending = note?.kind === 'pending';
+
+  function apply(r: CreateResult) {
+    if (r.kind === 'created') { setNote(null); return onCreated(r.vault); }
+    if (r.kind === 'exists') {
+      setNote({ kind: 'exists', message: r.message });
+      const go = (v: `0x${string}`) => setTimeout(() => onCreated(v), 1200);
+      if (r.vault) go(r.vault);
+      else lookupVault(factory, owner).then((v) => { if (v) go(v); }).catch(() => {});
+      return;
+    }
+    if (r.kind === 'pending') { setPendingHash(r.hash); setNote({ kind: 'pending', message: r.message }); return; }
+    setError(r);
+  }
+
+  async function checkAgain() {
+    const eth = window.ethereum;
+    if (!eth) return;
+    setBusy(true);
+    try {
+      apply(await recheckCreate({ lookup: () => lookupVault(factory, owner), wait: (h) => waitForReceipt(eth, h, 5) }, pendingHash));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function create() {
+    if (pending) return; // never re-send while the first tx is still confirming
     const eth = window.ethereum;
     if (!eth) return setError({ kind: 'error', message: 'No wallet found.' });
     setBusy(true);
     setError(null);
     try {
-      // Idempotent: an earlier tap may already have created it (VaultExists would revert).
-      const existing = await lookupVault(factory, owner).catch(() => null);
-      if (existing) return onCreated(existing);
-      await sendAndWait(eth, owner, buildCreateVault(factory, presetLimits(preset, target)));
-      const v = await lookupVault(factory, owner);
-      if (!v) throw new Error('Vault not found after creation.');
-      onCreated(v);
+      apply(await runCreate({
+        lookup: () => lookupVault(factory, owner),
+        send: () => sendTx(eth, owner, buildCreateVault(factory, presetLimits(preset, target))),
+        wait: (h) => waitForReceipt(eth, h),
+      }));
     } catch (e) {
-      const v = await lookupVault(factory, owner).catch(() => null);
-      if (v) return onCreated(v);
       setError(friendlyError(e));
     } finally {
       setBusy(false);
@@ -81,9 +106,14 @@ export function CreateVaultStep({
           </Button>
         ))}
       </div>
+      {note ? <InlineMessage err={note} /> : null}
       {error ? <InlineMessage err={error} onDismiss={() => setError(null)} /> : null}
-      <Button fullWidth onClick={create} disabled={busy}>{busy ? 'Creating…' : 'Create my vault'}</Button>
-      <Button variant="ghost" fullWidth onClick={() => setStage('target')} disabled={busy}>Back</Button>
+      {pending ? (
+        <Button fullWidth onClick={checkAgain} disabled={busy}>{busy ? 'Checking…' : 'Check again'}</Button>
+      ) : (
+        <Button fullWidth onClick={create} disabled={busy || note?.kind === 'exists'}>{busy ? 'Creating…' : 'Create my vault'}</Button>
+      )}
+      <Button variant="ghost" fullWidth onClick={() => setStage('target')} disabled={busy || pending}>Back</Button>
     </div>
   );
 }

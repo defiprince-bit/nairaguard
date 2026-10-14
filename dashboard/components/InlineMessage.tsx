@@ -1,11 +1,14 @@
 import type { FriendlyError } from '../lib/errors';
 
-/** Inline, in-card message. 'cancelled' is neutral, not an error. */
-export function InlineMessage({ err, onDismiss }: { err: FriendlyError; onDismiss?: () => void }) {
-  const cancelled = err.kind === 'cancelled';
+type Msg = FriendlyError | { kind: 'exists' | 'pending'; message: string };
+
+/** Inline, in-card message. 'cancelled', 'exists' and 'pending' are neutral, not errors. */
+export function InlineMessage({ err, onDismiss }: { err: Msg; onDismiss?: () => void }) {
+  const cancelled = err.kind !== 'error';
   return (
     <div
       role={cancelled ? 'status' : 'alert'}
+      aria-live={err.kind === 'pending' ? 'polite' : undefined}
       style={{
         display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between',
         padding: '10px 12px', borderRadius: 12,

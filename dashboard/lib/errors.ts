@@ -3,8 +3,8 @@ export type FriendlyError = { kind: 'error' | 'cancelled'; message: string };
 export const MSG_FEES = 'Add a little USDC to pay network fees.';
 export const MSG_BALANCE = "You don't have enough of this token.";
 export const MSG_CANCELLED = 'You cancelled this in your wallet.';
-export const MSG_VAULT_EXISTS = 'You already have a vault. Reopen the app to see it.';
-export const MSG_TIMEOUT = 'Still confirming. Wait a minute, then reopen the app.';
+export const MSG_VAULT_EXISTS = 'You already have a vault. Taking you to deposit…';
+export const MSG_TIMEOUT = "Still confirming on the network. This can take a minute, so we'll keep checking.";
 export const MSG_GENERIC = 'Something went wrong. Please try again.';
 
 type ErrLike = { code?: unknown; name?: unknown; message?: unknown; shortMessage?: unknown; details?: unknown; data?: unknown; cause?: unknown };
@@ -56,4 +56,17 @@ export function classifyError(e: unknown): FriendlyError {
 export function friendlyError(e: unknown): FriendlyError {
   console.error(e);
   return classifyError(e);
+}
+
+/** Create-vault outcome: VaultExists and a receipt timeout are not errors from the user's point of view. */
+export type CreateOutcome =
+  | { kind: 'exists'; message: string }
+  | { kind: 'pending'; message: string }
+  | FriendlyError;
+
+export function classifyCreateError(e: unknown): CreateOutcome {
+  const f = classifyError(e);
+  if (f.message === MSG_VAULT_EXISTS) return { kind: 'exists', message: MSG_VAULT_EXISTS };
+  if (f.message === MSG_TIMEOUT) return { kind: 'pending', message: MSG_TIMEOUT };
+  return f;
 }
