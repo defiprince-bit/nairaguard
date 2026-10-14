@@ -1,24 +1,43 @@
 {
   "network": "celo-sepolia",
   "chainId": 11142220,
-  "deployedAt": "2026-10-14T17:52:00Z",
-  "deployRun": "local forge script (Task 8a)",
-  "supersedes": "0xD6401dAc34b1D8BB9a617407f6bB84DeF9B03dcd",
+  "deployedAt": "2026-10-14T19:50:00Z",
+  "deployRun": "forge script script/Deploy.s.sol (Task 8b, fresh mocks)",
+  "supersedes": "0x6C5b2087b321F2eb1cCC2BEA915503bAceD608E1",
   "owner": "0x1ab29BDaAc75255501ADBBdcC2150fe4D346C0A7",
   "agent": "0xA2A173A481BC063fEE0EF11c67Fc756DC5f928f4",
   "contracts": {
-    "VaultFactory": "0x6C5b2087b321F2eb1cCC2BEA915503bAceD608E1",
-    "VaultImplementation": "0x4D3EA937aDD326aBef965918F7c6CeCD8D13567A",
-    "MockCNGN": "0xaA3B7364E418deC4Fb147f1BD2d95A4022082aEA",
-    "MockUSDT": "0xe123971ec3F56138766272B7b15Ee188fdD0eFf7",
-    "MockSwapRouter": "0xd834aB4e7caDc62f2E27ab6755ED4B22F0461e86",
-    "TestVault": "0x5cd6960f36E178852D75ACEC9Bf3796F0e21ac89"
+    "VaultFactory": "0x7C0aDDFc500De0a2Ce06eBa399c3E55E47E2Aceb",
+    "VaultImplementation": "0xeEaEF2037bEF8dFdB5137ef15d487D6ED12eFD36",
+    "MockCNGN": "0xFA66cfEd00F4C079926fdC436185A010f1AD3123",
+    "MockUSDT": "0x6b941732c3B78D9232cd8332b8D3448B4a13beC0",
+    "MockChainlinkFeed": "0x5EF4E9401d990C57201954472bf9BdB23DCD655d",
+    "MockTextileReactor": "0x412e3e068c834758e34f8D5468D6d8DCAddf4DE4"
   },
-  "factoryDeployBlock": 38716408,
+  "tokenDecimals": {
+    "MockCNGN": 6,
+    "MockUSDT": 6
+  },
+  "feedDecimals": 8,
+  "venues": [
+    {
+      "target": "0x412e3e068c834758e34f8D5468D6d8DCAddf4DE4",
+      "spender": "0x412e3e068c834758e34f8D5468D6d8DCAddf4DE4",
+      "label": "textile-mock"
+    }
+  ],
+  "factoryDeployBlock": 38723073,
   "txs": {
-    "VaultImplementation": "0x0030861187ce7c7cb72204355dcfb5eb3c0365aa5e5e368e20095644a5405d3a",
-    "VaultFactory": "0x7427eb00fd7410c898187eee9cb2b5cfdd49a0d319d0b884b97df38fb1a174b8",
-    "setRouter": "0x3f03c3e1ede4b12726429eb5365e4ae75d7878bec17887fa2a5b1fd73707566c",
-    "createVault": "0x4af95cf0fa1c664b93652ac044ab5140998b8f93c964cbdffbce3951ef5e0d09"
+    "MockCNGN": "0x8895527f61a6bbfc67d1c816bd0e039824c1f67afa8e4f7853b4fcdf9d905c84",
+    "MockUSDT": "0x0b14b66554090df15ba6404cea21df23e7c5c79f5337b4bd61abbbd2cd01811f",
+    "MockChainlinkFeed": "0x13d2ac3286719ca2c2a978256f125b599d4071d276590fa19d0fa40e543ba9be",
+    "feed.transferOwnership": "0xd2dc2445224b502ef666ddc4530306a123c46a1c6e8cae7042ceffd7279e3353",
+    "MockTextileReactor": "0xfb387ee6a743f04839fa21c4d8454a00e974a61bfdefae24073a14150824c263",
+    "mint.cNGN.reactor": "0x2a8b9e14b95bd611e7b9734c6bb236e3e8e4892768255e2c78ff1cf4e9ce3c24",
+    "mint.USDT.reactor": "0x1fbe06a4cbcba222afb497abf97fbe2a8accebd24c34f79cfcf43ce9e506f1ce",
+    "VaultImplementation": "0xef4b693c185c982fcb06b417b1e31bc365768690da713aae8ba106167b15be3e",
+    "VaultFactory": "0xd53359935f901b26a02d6e24f8285243b8f2e50faec3b528c8798fa763e3ada9",
+    "setPriceFeed": "0xfcaba207c51ea23e19802ef9600a335ef20b0105d89233409c7504f49dcab2e9",
+    "setVenue": "0x615fc2a7801175091a3af335c6140e0c7f8a8e1860aff713e5b1cdb09bcd911c"
   }
 }

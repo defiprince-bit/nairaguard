@@ -24,13 +24,13 @@ export type NetworkAddresses = {
 export const ADDRESSES: Partial<Record<typeof NETWORK, NetworkAddresses>> = {
   'celo-sepolia': {
     chainId: 11142220,
-    factory: (process.env.FACTORY_ADDRESS ?? '0x6C5b2087b321F2eb1cCC2BEA915503bAceD608E1') as `0x${string}`,
-    factoryStartBlock: BigInt(process.env.FACTORY_START_BLOCK ?? 38716408),
-    // 8b redeploy replaces these (6-dp mocks): set CNGN_ADDRESS / USDT_ADDRESS / PRICE_FEED_ADDRESS / MOCK_REACTOR_ADDRESS.
-    cngn: (process.env.CNGN_ADDRESS ?? '0xaA3B7364E418deC4Fb147f1BD2d95A4022082aEA') as `0x${string}`,
-    usdt: (process.env.USDT_ADDRESS ?? '0xe123971ec3F56138766272B7b15Ee188fdD0eFf7') as `0x${string}`,
-    priceFeed: (process.env.PRICE_FEED_ADDRESS ?? '0x0000000000000000000000000000000000000000') as `0x${string}`,
-    mockReactor: (process.env.MOCK_REACTOR_ADDRESS ?? '0x0000000000000000000000000000000000000000') as `0x${string}`,
+    factory: (process.env.FACTORY_ADDRESS ?? '0x7C0aDDFc500De0a2Ce06eBa399c3E55E47E2Aceb') as `0x${string}`,
+    factoryStartBlock: BigInt(process.env.FACTORY_START_BLOCK ?? 38723073),
+    // Task 8b redeploy (6-dp mocks, mock feed, mock reactor). Env vars override.
+    cngn: (process.env.CNGN_ADDRESS ?? '0xFA66cfEd00F4C079926fdC436185A010f1AD3123') as `0x${string}`,
+    usdt: (process.env.USDT_ADDRESS ?? '0x6b941732c3B78D9232cd8332b8D3448B4a13beC0') as `0x${string}`,
+    priceFeed: (process.env.PRICE_FEED_ADDRESS ?? '0x5EF4E9401d990C57201954472bf9BdB23DCD655d') as `0x${string}`,
+    mockReactor: (process.env.MOCK_REACTOR_ADDRESS ?? '0x412e3e068c834758e34f8D5468D6d8DCAddf4DE4') as `0x${string}`,
   },
   // celo mainnet: TBD after mainnet deploy (Task 9)
 };
