@@ -74,6 +74,14 @@ describe('agent loop', () => {
     const { rows } = await db.query<{ kind: string; status: string; tx_hash: string }>('SELECT * FROM activity');
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ kind: 'swap', status: 'confirmed' });
+
+    // Quote + baseline logged before the swap, and again after it with per-swap fee/P&L.
+    const q = await db.query('SELECT * FROM quotes');
+    expect(q.rows).toHaveLength(2);
+    const b = await db.query<{ rate_start: string }>('SELECT * FROM vault_baseline');
+    expect(b.rows[0]?.rate_start).toBe('1500');
+    const a = await db.query<{ fee_ngn: string | null }>("SELECT fee_ngn FROM activity WHERE kind='swap'");
+    expect(a.rows[0]?.fee_ngn).not.toBeNull();
   });
 
   it('does nothing inside the band and records a skip', async () => {
