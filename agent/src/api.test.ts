@@ -59,14 +59,51 @@ describe('P&L', () => {
   });
 });
 
+describe('Task 8a follow-ups', () => {
+  it('P&L is null (not 0.00) before a baseline exists', async () => {
+    await db.query(`INSERT INTO quotes (vault, rate, ngn_balance, usd_balance, value_ngn, hold_value_ngn, pnl_ngn)
+      VALUES ($1,'1500','0','0','0','0','0')`, [VAULT.toLowerCase()]);
+    live = state(0, 0);
+    const r = await api().handle({ method: 'GET', url: `/api/vault/${VAULT}/balances` });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ pnlNgn: null, pnlUsd: null, pnlSince: null, lastCheckedAt: null });
+  });
+
+  it('approvals with no quote return rate null and "rate unavailable", never rate 1', async () => {
+    await db.query(`INSERT INTO approvals (vault, onchain_id, token_in, token_out, amount_in, min_out, usd_value, reason, expires_at)
+      VALUES ($1,'7',$2,$3,$4,'1','1','big','2026-10-15T00:00:00Z')`, [VAULT, CNGN, USDT, e18(90_000).toString()]);
+    const item = ((await api().handle({ method: 'GET', url: `/api/vault/${VAULT}/approvals` })).body as any).items[0];
+    expect(item.rate).toBeNull();
+    expect(item.rateNote).toBe('rate unavailable');
+    expect(item.in).toMatchObject({ token: 'cNGN', amountNgn: null, amountUsd: null, rate: null });
+  });
+
+  it('volume uses actual amounts, and lastCheckedAt is per vault', async () => {
+    const other = '0x00000000000000000000000000000000000000aa';
+    await logQuote(db, VAULT, e18(300_000), e18(100), 1500, clock);
+    await db.query(`INSERT INTO activity (vault, kind, token_in, token_out, amount_in, min_out, amount_out, reason, status)
+      VALUES ($1,'swap',$2,$3,$4,$5,$6,'r','confirmed'), ($1,'swap',$3,$2,$7,'1',$8,'r','confirmed')`,
+      [VAULT, CNGN, USDT, e18(75_000).toString(), e18(40).toString(), e18(49.9).toString(), e18(10).toString(), e18(14_900).toString()]);
+    await db.query(`INSERT INTO agent_runs (vault, ok, ran_at) VALUES ($1,true,'2026-10-14T11:55:00Z'), ($2,true,'2026-10-14T11:59:00Z')`,
+      [VAULT.toLowerCase(), other]);
+    const b = (await api().handle({ method: 'GET', url: `/api/vault/${VAULT}/balances` })).body as any;
+    expect(b.volumeUsd).toBe('59.90'); // 49.9 received + 10 sent, not minOut 40
+    expect(b.lastCheckedAt).toBe('2026-10-14T11:55:00.000Z');
+    const st = (await api().handle({ method: 'GET', url: `/api/vault/${VAULT}/status` })).body as any;
+    expect(st).toMatchObject({ lastCheckedAt: '2026-10-14T11:55:00.000Z', ok: true });
+  });
+});
+
 describe('read endpoints', () => {
   it('limits, activity, approvals, agent', async () => {
     const a = api();
     expect((await a.handle({ method: 'GET', url: `/api/vault/${VAULT}/limits` })).body).toMatchObject({ targetNgnBps: 5000, maxSlippageBps: 100 });
-    await db.query(`INSERT INTO activity (vault, kind, token_in, token_out, amount_in, min_out, rate, reason, tx_hash, status)
-      VALUES ($1,'swap',$2,$3,$4,$5,'1500','rebalance','0xab','confirmed')`, [VAULT, CNGN, USDT, e18(75_000).toString(), e18(49.5).toString()]);
+    await db.query(`INSERT INTO activity (vault, kind, token_in, token_out, amount_in, min_out, amount_out, rate, reason, tx_hash, status)
+      VALUES ($1,'swap',$2,$3,$4,$5,$6,'1500','rebalance','0xab','confirmed')`,
+      [VAULT, CNGN, USDT, e18(75_000).toString(), e18(49.5).toString(), e18(49.9).toString()]);
     const act = (await a.handle({ method: 'GET', url: `/api/vault/${VAULT}/activity` })).body as { items: any[] };
-    expect(act.items[0]).toMatchObject({ kind: 'swap', in: { token: 'cNGN', amountUsd: '50.00' }, out: { token: 'USDT' } });
+    // `out` is the actual amount received (49.9), not minOut (49.5).
+    expect(act.items[0]).toMatchObject({ kind: 'swap', in: { token: 'cNGN', amountUsd: '50.00' }, out: { token: 'USDT', amountUsd: '49.90' } });
     await db.query(`INSERT INTO approvals (vault, onchain_id, token_in, token_out, amount_in, min_out, usd_value, reason, expires_at)
       VALUES ($1,'1',$2,$3,'1','1','1','big','2026-10-15T00:00:00Z')`, [VAULT, CNGN, USDT]);
     expect(((await a.handle({ method: 'GET', url: `/api/vault/${v}/approvals` })).body as any).items).toHaveLength(1);

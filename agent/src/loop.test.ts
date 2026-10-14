@@ -55,6 +55,32 @@ const deps = (chain: ChainPort) => ({
   now: () => new Date('2026-10-14T12:00:00Z'),
 });
 
+describe('actual amount out', () => {
+  it('records amountOut from the Swapped event, not minOut', async () => {
+    const swapped = {
+      address: VAULT,
+      topics: encodeEventTopics({ abi: vaultAbi, eventName: 'Swapped', args: { id: 0n } }),
+      data: encodeAbiParameters(
+        [{ type: 'address' }, { type: 'address' }, { type: 'uint256' }, { type: 'uint256' }],
+        [CNGN, USDT, e18(75_000), e18(49.97)]),
+    } as unknown as Log;
+    const chain = new FakeChain(state(), [swapped]);
+    await runOnce(deps(chain));
+    const { rows } = await db.query<{ amount_out: string; min_out: string }>('SELECT amount_out, min_out FROM activity');
+    expect(rows[0]!.amount_out).toBe(e18(49.97).toString());
+    expect(rows[0]!.amount_out).not.toBe(rows[0]!.min_out);
+  });
+
+  it('falls back to the tokenOut balance delta when no event is found', async () => {
+    let n = 0;
+    const chain = new FakeChain(state());
+    chain.readState = async () => (n++ === 0 ? state() : state({ ngnBalance: e18(225_000), usdBalance: e18(149.8) }));
+    await runOnce(deps(chain));
+    const { rows } = await db.query<{ amount_out: string }>('SELECT amount_out FROM activity');
+    expect(rows[0]!.amount_out).toBe(e18(49.8).toString());
+  });
+});
+
 describe('agent loop', () => {
   it('swaps below threshold with tagged calldata and records activity', async () => {
     const chain = new FakeChain(state());

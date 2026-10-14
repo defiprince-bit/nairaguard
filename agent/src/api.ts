@@ -73,10 +73,39 @@ export function createApi(d: ApiDeps) {
       balances: bal,
       ngnShareBps: total > 0 ? Math.round((Number(bal[0]!.amountNgn) / total) * 10_000) : 0,
       targetNgnBps: st?.limits.targetNgnBps ?? null,
-      pnlNgn: p ? p.pnlNgn.toFixed(2) : '0.00',
-      pnlUsd: p ? p.pnlUsd.toFixed(2) : '0.00',
+      // No baseline yet → P&L unknown, not zero.
+      pnlNgn: p ? p.pnlNgn.toFixed(2) : null,
+      pnlUsd: p ? p.pnlUsd.toFixed(2) : null,
       pnlSince: b ? iso(b.fundedAt) : null,
+      volumeUsd: await volumeUsd(vault),
+      lastCheckedAt: await lastCheckedAt(vault),
     });
+  }
+
+  /** Last agent check of this vault (any outcome), or null if never checked. */
+  async function lastCheckedAt(vault: string): Promise<string | null> {
+    const r = await d.db.query<{ t: string | Date | null }>(
+      'SELECT max(ran_at) AS t FROM agent_runs WHERE lower(vault)=$1', [vault]);
+    return r.rows[0]?.t ? iso(r.rows[0].t) : null;
+  }
+
+  /** Traded volume in USD from actual amounts: the USD₮ leg of each confirmed swap (amount_out when USD₮ is received). */
+  async function volumeUsd(vault: string): Promise<string> {
+    const r = await d.db.query<{ token_in: string; amount_in: string | null; amount_out: string | null }>(
+      `SELECT token_in, amount_in, amount_out FROM activity WHERE lower(vault)=$1 AND kind='swap' AND status='confirmed'`, [vault]);
+    let total = 0n;
+    for (const a of r.rows) {
+      const usdLeg = a.token_in?.toLowerCase() === d.tokens.usdt.toLowerCase() ? a.amount_in : a.amount_out;
+      if (usdLeg) total += BigInt(usdLeg);
+    }
+    return (Number(total) / 1e18).toFixed(2);
+  }
+
+  async function status(vault: string) {
+    const r = await d.db.query<{ ran_at: string; ok: boolean; error: string | null }>(
+      'SELECT ran_at, ok, error FROM agent_runs WHERE lower(vault)=$1 ORDER BY ran_at DESC, id DESC LIMIT 1', [vault]);
+    const last = r.rows[0];
+    return json(200, { vault, lastCheckedAt: last ? iso(last.ran_at) : null, ok: last ? last.ok : null });
   }
 
   async function activity(vault: string) {
@@ -87,7 +116,7 @@ export function createApi(d: ApiDeps) {
       items: r.rows.map((a) => {
         const rate = Number(a.rate ?? 0);
         const at = a.created_at!;
-        const outAmt = a.min_out; // TODO(Task 8): actual amountOut from Swapped event
+        const outAmt = a.amount_out; // actual received; null for legacy rows (never minOut)
         return {
           id: String(a.id), kind: a.kind, reason: a.reason, txHash: a.tx_hash, status: a.status, at: iso(at),
           in: a.amount_in && rate ? money(sym(a.token_in), a.amount_in, rate, at) : undefined,
@@ -105,11 +134,15 @@ export function createApi(d: ApiDeps) {
       [vault, now().toISOString()]);
     return json(200, {
       items: r.rows.map((a) => {
-        const rate = Number(a.rate ?? 0) || 1;
+        const rate = Number(a.rate ?? 0);
+        const token = (t: string, amount: string) =>
+          rate > 0 ? money(sym(t), amount, rate, a.created_at) : { token: sym(t), amount, amountNgn: null, amountUsd: null, rate: null, rateAt: null };
         return {
           id: a.onchain_id, reason: a.reason, expiresAt: iso(a.expires_at),
-          in: money(sym(a.token_in), a.amount_in, rate, a.created_at),
-          minOut: money(sym(a.token_out), a.min_out, rate, a.created_at),
+          rate: rate > 0 ? String(rate) : null,
+          rateNote: rate > 0 ? undefined : 'rate unavailable',
+          in: token(a.token_in, a.amount_in),
+          minOut: token(a.token_out, a.min_out),
         };
       }),
     });
@@ -248,11 +281,11 @@ export function createApi(d: ApiDeps) {
   async function route(req: ApiRequest): Promise<ApiResponse> {
     const u = new URL(req.url, 'http://x');
     const p = u.pathname.replace(/\/+$/, '');
-    const m = p.match(/^\/api\/vault\/(0x[0-9a-fA-F]{40})\/(balances|activity|approvals|limits)$/);
+    const m = p.match(/^\/api\/vault\/(0x[0-9a-fA-F]{40})\/(balances|activity|approvals|limits|status)$/);
     try {
       if (req.method === 'GET' && m) {
         const v = m[1]!.toLowerCase();
-        return await ({ balances, activity, approvals, limits } as const)[m[2] as 'balances'](v);
+        return await ({ balances, activity, approvals, limits, status } as const)[m[2] as 'balances'](v);
       }
       if (req.method === 'GET' && p === '/api/agent') return await agent();
       if (req.method === 'GET' && p === '/api/waitlist/nonce') return await nonce(u.searchParams.get('address'));

@@ -37,6 +37,8 @@ export type ActivityRow = {
   tokenOut?: string;
   amountIn?: string;
   minOut?: string;
+  /** Actual tokenOut received (swap only). */
+  amountOut?: string;
   usdValue?: string;
   rate?: string;
   reason: string;
@@ -46,10 +48,10 @@ export type ActivityRow = {
 
 export async function insertActivity(db: Db, a: ActivityRow): Promise<void> {
   await db.query(
-    `INSERT INTO activity (vault, kind, token_in, token_out, amount_in, min_out, usd_value, rate, reason, tx_hash, status)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+    `INSERT INTO activity (vault, kind, token_in, token_out, amount_in, min_out, usd_value, rate, reason, tx_hash, status, amount_out)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
     [a.vault, a.kind, a.tokenIn ?? null, a.tokenOut ?? null, a.amountIn ?? null, a.minOut ?? null,
-     a.usdValue ?? null, a.rate ?? null, a.reason, a.txHash ?? null, a.status],
+     a.usdValue ?? null, a.rate ?? null, a.reason, a.txHash ?? null, a.status, a.amountOut ?? null],
   );
 }
 

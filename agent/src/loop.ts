@@ -103,6 +103,18 @@ export async function runOnce(d: LoopDeps): Promise<RunResult> {
 
     const r = await d.chain.send(tx);
     const status = r.status === 'success' ? 'confirmed' : 'failed';
+
+    // Actual amount out: the vault's Swapped event, else the tokenOut balance delta. Never minOut.
+    let after: VaultState | undefined;
+    let amountOut: bigint | undefined;
+    if (decision.action === 'swap' && status === 'confirmed') {
+      amountOut = swappedAmountOut(r.logs, d.vault);
+      after = await d.chain.readState();
+      if (amountOut === undefined) {
+        amountOut = decision.direction === 'ngnToUsd' ? after.usdBalance - s.usdBalance : after.ngnBalance - s.ngnBalance;
+        if (amountOut < 0n) amountOut = undefined;
+      }
+    }
     await insertActivity(d.db, {
       vault: d.vault,
       kind: decision.action,
@@ -110,6 +122,7 @@ export async function runOnce(d: LoopDeps): Promise<RunResult> {
       tokenOut,
       amountIn: amountIn.toString(),
       minOut: minOut.toString(),
+      amountOut: amountOut?.toString(),
       usdValue: usdValue.toString(),
       rate: String(rate),
       reason: decision.reason,
@@ -117,9 +130,8 @@ export async function runOnce(d: LoopDeps): Promise<RunResult> {
       status,
     });
 
-    if (decision.action === 'swap' && status === 'confirmed') {
+    if (after) {
       // Per-swap P&L: value change across the swap at the same rate (fees + slippage).
-      const after = await d.chain.readState();
       const fee = valueNgn(after.ngnBalance, after.usdBalance, rate) - valueNgn(s.ngnBalance, s.usdBalance, rate);
       const p = await logQuote(d.db, d.vault, after.ngnBalance, after.usdBalance, rate, now);
       await d.db.query(
@@ -157,4 +169,18 @@ export async function runOnce(d: LoopDeps): Promise<RunResult> {
     await recordRun(d.db, d.vault, false, (err as Error).message.slice(0, 500)).catch(() => {});
     throw err;
   }
+}
+
+/** amountOut from the vault's own Swapped event in a receipt (ignores logs from other contracts). */
+export function swappedAmountOut(logs: Log[], vault: string): bigint | undefined {
+  for (const log of logs) {
+    if (log.address && log.address.toLowerCase() !== vault.toLowerCase()) continue;
+    try {
+      const ev = decodeEventLog({ abi: vaultAbi, data: log.data, topics: log.topics });
+      if (ev.eventName === 'Swapped') return ev.args.amountOut;
+    } catch {
+      /* not a vault event */
+    }
+  }
+  return undefined;
 }
