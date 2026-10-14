@@ -64,10 +64,27 @@ describe('templates', () => {
 });
 
 describe('links', () => {
-  it('MiniPay deep link for minipay, /app?connect=1 otherwise, both with utm_source', () => {
+  const dashApp = `${DASH}/app?utm_source=minipay&utm_medium=email&utm_campaign=launch`;
+  it('MiniPay gets plain dashboard /app with utm when no listing id is set', () => {
+    expect(ctaUrl({ source: 'minipay', from_minipay: true }, DASH, 'launch')).toBe(dashApp);
+    expect(ctaUrl({ source: 'x', from_minipay: true }, DASH, 'launch'))
+      .toBe(`${DASH}/app?utm_source=x&utm_medium=email&utm_campaign=launch`);
+  });
+  it('MiniPay uses miniapp?id= when MINIPAY_MINIAPP_ID is set', () => {
+    expect(ctaUrl({ source: 'minipay', from_minipay: true }, DASH, 'launch', { miniappId: 'abc-123' }))
+      .toBe('https://link.minipay.xyz/miniapp?id=abc-123');
+  });
+  it('MINIPAY_DEEPLINK_BASE overrides the miniapp id', () => {
+    expect(ctaUrl({ source: 'minipay', from_minipay: true }, DASH, 'launch', {
+      miniappId: 'abc-123', deeplinkBase: 'https://link.minipay.xyz/miniapp?id=custom',
+    })).toBe('https://link.minipay.xyz/miniapp?id=custom');
+  });
+  it('never defaults to the deprecated browse?url= form', () => {
     const mp = ctaUrl({ source: 'minipay', from_minipay: true }, DASH, 'launch');
-    expect(mp.startsWith('https://link.minipay.xyz/browse?url=')).toBe(true);
-    expect(decodeURIComponent(mp.split('url=')[1]!)).toBe(`${DASH}/app?utm_source=minipay&utm_medium=email&utm_campaign=launch`);
+    expect(mp).not.toContain('browse?url=');
+    expect(mp).not.toContain('link.minipay.xyz/browse');
+  });
+  it('/app?connect=1 for non-MiniPay, with utm_source', () => {
     expect(ctaUrl({ source: 'valora', from_minipay: false }, DASH, 'launch'))
       .toBe(`${DASH}/app?connect=1&utm_source=valora&utm_medium=email&utm_campaign=launch`);
   });

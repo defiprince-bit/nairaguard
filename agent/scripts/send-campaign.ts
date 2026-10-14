@@ -5,12 +5,12 @@
  *   ... --campaign launch-2026-11 --send --batch 50                                     # real batch (owner-approved)
  * Env: DATABASE_URL, RESEND_API_KEY, MAIL_FROM, UNSUBSCRIBE_SECRET (same as the agent's), DASHBOARD_URL,
  *      optional UNSUBSCRIBE_BASE_URL (default DASHBOARD_URL), EMAIL_TEMPLATE_HTML / EMAIL_TEMPLATE_TEXT, EMAIL_SUBJECT,
- *      MINIPAY_DEEPLINK_BASE.
+ *      MINIPAY_MINIAPP_ID (Discover listing id → link.minipay.xyz/miniapp?id=), optional MINIPAY_DEEPLINK_BASE override.
  * Re-runs are safe: contacts already sent for this campaign, or unsubscribed, are skipped. Prints counts only, never contacts.
  */
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadTemplates, MINIPAY_DEEPLINK_BASE, resendMailer, runCampaign } from '../src/campaign.js';
+import { loadTemplates, resendMailer, runCampaign } from '../src/campaign.js';
 import { connect, migrate } from '../src/db.js';
 
 const args = process.argv.slice(2);
@@ -40,7 +40,8 @@ const res = await runCampaign(db, {
     process.env.EMAIL_TEMPLATE_TEXT ?? join(tplDir, 'launch-email.txt'),
     process.env.EMAIL_SUBJECT ?? 'Deposits are open on NairaGuard'),
   mailer: send ? resendMailer(process.env.RESEND_API_KEY!) : undefined,
-  minipayBase: process.env.MINIPAY_DEEPLINK_BASE ?? MINIPAY_DEEPLINK_BASE,
+  minipayBase: process.env.MINIPAY_DEEPLINK_BASE,
+  miniappId: process.env.MINIPAY_MINIAPP_ID,
 });
 console.log(JSON.stringify({ campaign, ...res }));
 process.exit(res.failed > 0 ? 1 : 0);
