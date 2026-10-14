@@ -128,18 +128,25 @@ export function WaitlistForm() {
       return fail('nonce_network');
     }
     // 2) sign (MiniPay may not support personal_sign; surface the provider code)
-    let signature: string;
-    try {
-      signature = (await eth.request({ method: 'personal_sign', params: [message, wallet] })) as string;
-    } catch (e) {
-      const err = e as { code?: number; name?: string; message?: string };
-      if (err.code === 4001 || err.name === 'UserRejectedRequestError') {
-        setVerifyState('skipped');
-        return;
+    // Try 0x-hex UTF-8 first (some wallets only accept that), then the plain string. Same bytes are signed either way.
+    const hexMessage = `0x${Array.from(new TextEncoder().encode(message), (b) => b.toString(16).padStart(2, '0')).join('')}`;
+    let signature: string | undefined;
+    const errs: string[] = [];
+    for (const [tag, payload] of [['hex', hexMessage], ['utf8', message]] as const) {
+      try {
+        signature = (await eth.request({ method: 'personal_sign', params: [payload, wallet] })) as string;
+        break;
+      } catch (e) {
+        const err = e as { code?: number; name?: string; message?: string };
+        if (err.code === 4001 || err.name === 'UserRejectedRequestError') {
+          setVerifyState('skipped');
+          return;
+        }
+        const unsupported = err.code === 4200 || err.code === -32601 || /not (currently )?supported|unsupported/i.test(err.message ?? '');
+        errs.push(`${tag}:${unsupported ? 'unsupported_' : ''}${err.code ?? err.name ?? 'error'}`);
       }
-      const unsupported = err.code === 4200 || err.code === -32601 || /not (currently )?supported|unsupported/i.test(err.message ?? '');
-      return fail(unsupported ? `sign_unsupported_${err.code ?? 'x'}` : `sign_${err.code ?? err.name ?? 'error'}`);
     }
+    if (!signature) return fail(`sign_${errs.join('|')}`);
     if (typeof signature !== 'string' || !signature.startsWith('0x')) return fail('sign_empty');
     // 3) verify
     try {
