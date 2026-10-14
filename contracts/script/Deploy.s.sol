@@ -44,12 +44,9 @@ contract Deploy is Script {
         Vault impl = new Vault();
         factory = new VaultFactory(address(impl), agent, cngn, usdt);
         factory.setPriceFeed(feed);
-        factory.setTextileTarget(reactor, true);
-        factory.setTextileSpender(reactor, true);
-        if (spender != reactor) {
-            factory.setTextileTarget(spender, true);
-            factory.setTextileSpender(spender, true);
-        }
+        // Allowlisted (target, spender) pairs. Never Permit2.
+        factory.setVenue(reactor, reactor, true);
+        if (spender != reactor) factory.setVenue(spender, spender, true);
 
         vm.stopBroadcast();
 

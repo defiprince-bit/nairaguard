@@ -31,10 +31,9 @@ contract VaultFactory {
     address public textileRouter;
 
     mapping(address router => bool) public isRouter;
-    /// @notice Textile reactors vaults may call in `swapViaTextile` (design.md §8).
-    mapping(address target => bool) public isTextileTarget;
-    /// @notice Addresses vaults may approve for `amountIn` in `swapViaTextile`.
-    mapping(address spender => bool) public isTextileSpender;
+    /// @notice Allowlisted (target, spender) venue pairs for `Vault.swapViaRfq`, keyed on
+    ///         keccak256(abi.encode(target, spender)). New venues (e.g. a DEX) need no vault redeploy.
+    mapping(bytes32 pairKey => bool) public isVenuePair;
 
     uint16 public constant MAX_DEVIATION_CAP_BPS = 1_000; // 10%
     /// @notice How long the agent has to execute an approved proposal.
@@ -51,8 +50,7 @@ contract VaultFactory {
     event VaultCreated(address indexed owner, address indexed vault);
     event AgentUpdated(address indexed agent);
     event RouterUpdated(address indexed router, bool allowed);
-    event TextileTargetUpdated(address indexed target, bool allowed);
-    event TextileSpenderUpdated(address indexed spender, bool allowed);
+    event VenueUpdated(address indexed target, address indexed spender, bool allowed);
     event PriceFeedUpdated(address indexed feed);
     event OracleParamsUpdated(uint16 maxDeviationBps, uint32 maxFeedAge);
     event FallbackRateUpdated(bool enabled, uint256 rate, uint8 decimals, uint32 maxAge);
@@ -110,16 +108,19 @@ contract VaultFactory {
         emit RouterUpdated(router, allowed);
     }
 
-    function setTextileTarget(address target, bool allowed) external onlyOwner {
-        if (target == address(0)) revert ZeroAddress();
-        isTextileTarget[target] = allowed;
-        emit TextileTargetUpdated(target, allowed);
+    function venueKey(address target, address spender) public pure returns (bytes32) {
+        return keccak256(abi.encode(target, spender));
     }
 
-    function setTextileSpender(address spender, bool allowed) external onlyOwner {
-        if (spender == address(0)) revert ZeroAddress();
-        isTextileSpender[spender] = allowed;
-        emit TextileSpenderUpdated(spender, allowed);
+    function isAllowedVenue(address target, address spender) external view returns (bool) {
+        return isVenuePair[venueKey(target, spender)];
+    }
+
+    /// @notice Allowlist (or remove) a (target, spender) pair, e.g. (reactor, reactor). Never add Permit2.
+    function setVenue(address target, address spender, bool allowed) external onlyOwner {
+        if (target == address(0) || spender == address(0)) revert ZeroAddress();
+        isVenuePair[venueKey(target, spender)] = allowed;
+        emit VenueUpdated(target, spender, allowed);
     }
 
     /// @notice Chainlink NGN/USD feed (Celo mainnet: 0xc17cbe2db40e53f4984c46f608da6da1ff074c11).

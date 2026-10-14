@@ -37,8 +37,7 @@ interface IVaultFactory {
 
     function isRouter(address router) external view returns (bool);
     function textileRouter() external view returns (address);
-    function isTextileTarget(address target) external view returns (bool);
-    function isTextileSpender(address spender) external view returns (bool);
+    function isAllowedVenue(address target, address spender) external view returns (bool);
     function approvalWindow() external view returns (uint64);
     function oracleConfig() external view returns (OracleConfig memory);
 }
@@ -308,7 +307,7 @@ contract Vault {
     }
 
     /// @notice Owner approves a proposal. Starts the execution window (`factory.approvalWindow()`) during
-    ///         which the agent may run it once via `swapViaTextile` at `approvedMinOut` or better.
+    ///         which the agent may run it once via `swapViaRfq` at `approvedMinOut` or better.
     function approve(uint256 id) external onlyOwner returns (uint64 expiresAt) {
         if (paused) revert VaultPaused();
         Approval storage approval = approvals[id];
@@ -336,11 +335,12 @@ contract Vault {
         emit SwapRejected(id);
     }
 
-    // ── Textile RFQ path (design.md §8) ──────────────────────────────────
+    // ── RFQ / venue path (design.md §8) ──────────────────────────────────
 
-    /// @notice Agent-only swap through an allowlisted Textile reactor using RFQ calldata.
+    /// @notice Agent-only swap through an allowlisted (target, spender) venue pair using quote calldata
+    ///         (Textile RFQ today; any venue the factory owner allowlists later).
     /// @param approvalId 0 for trades below the approval threshold; otherwise an approved, unexpired proposal.
-    function swapViaTextile(
+    function swapViaRfq(
         address tokenIn,
         address tokenOut,
         uint256 amountIn,
@@ -352,7 +352,7 @@ contract Vault {
     ) external onlyAgent nonReentrant returns (uint256 amountOut) {
         if (paused) revert VaultPaused();
         IVaultFactory f = IVaultFactory(factory);
-        if (!f.isTextileTarget(target) || !f.isTextileSpender(spender)) revert NotAllowlisted();
+        if (!f.isAllowedVenue(target, spender)) revert NotAllowlisted();
         if (supported[target] || target == address(this)) revert NotAllowlisted();
         _checkTextileTrade(tokenIn, tokenOut, amountIn, minOut, approvalId);
         amountOut = _callReactor(tokenIn, tokenOut, amountIn, minOut, target, spender, data);

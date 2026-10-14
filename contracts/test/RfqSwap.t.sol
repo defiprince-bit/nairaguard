@@ -42,7 +42,7 @@ contract RevertingReactor {
     }
 }
 
-contract TextileSwapTest is Test {
+contract RfqSwapTest is Test {
     VaultFactory factory;
     VaultHarness vault;
     MockERC20 cngn;
@@ -70,8 +70,7 @@ contract TextileSwapTest is Test {
 
         factory = new VaultFactory(address(new VaultHarness()), agent, address(cngn), address(usdt));
         factory.setPriceFeed(address(feed));
-        factory.setTextileTarget(address(reactor), true);
-        factory.setTextileSpender(address(reactor), true);
+        factory.setVenue(address(reactor), address(reactor), true);
         vault = VaultHarness(factory.createVault(_limits()));
 
         cngn.mint(owner, 10_000_000e6);
@@ -117,7 +116,7 @@ contract TextileSwapTest is Test {
         uint256 amtIn = 13_615e6;
         uint256 amtOut = 10_003_674; // 13615 / 1361
         vm.prank(agent);
-        return vault.swapViaTextile(
+        return vault.swapViaRfq(
             address(cngn),
             address(usdt),
             amtIn,
@@ -135,29 +134,54 @@ contract TextileSwapTest is Test {
         bytes memory d = _data(address(cngn), address(usdt), 13_615e6, 10e6, address(vault));
         vm.prank(stranger);
         vm.expectRevert(Vault.NotAgent.selector);
-        vault.swapViaTextile(address(cngn), address(usdt), 13_615e6, 10e6, address(reactor), address(reactor), d, 0);
+        vault.swapViaRfq(address(cngn), address(usdt), 13_615e6, 10e6, address(reactor), address(reactor), d, 0);
         vm.expectRevert(Vault.NotAgent.selector); // owner can't either
-        vault.swapViaTextile(address(cngn), address(usdt), 13_615e6, 10e6, address(reactor), address(reactor), d, 0);
+        vault.swapViaRfq(address(cngn), address(usdt), 13_615e6, 10e6, address(reactor), address(reactor), d, 0);
     }
 
     function test_RevertTargetNotAllowlisted() public {
-        factory.setTextileTarget(address(reactor), false);
+        factory.setVenue(address(reactor), address(reactor), false);
         vm.expectRevert(Vault.NotAllowlisted.selector);
         _sellNgn(10e6, 0);
     }
 
-    function test_RevertSpenderNotAllowlisted() public {
-        factory.setTextileSpender(address(reactor), false);
+    function test_RevertMismatchedVenuePair() public {
+        // Both contracts are individually allowlisted, but (reactor, executor) is not an allowlisted pair.
+        MockTextileReactor executor = new MockTextileReactor();
+        factory.setVenue(address(executor), address(executor), true);
+        bytes memory d = _data(address(cngn), address(usdt), 13_615e6, 10_003_674, address(vault));
+        vm.prank(agent);
         vm.expectRevert(Vault.NotAllowlisted.selector);
-        _sellNgn(10e6, 0);
+        vault.swapViaRfq(address(cngn), address(usdt), 13_615e6, 10e6, address(reactor), address(executor), d, 0);
+        vm.prank(agent);
+        vm.expectRevert(Vault.NotAllowlisted.selector);
+        vault.swapViaRfq(address(cngn), address(usdt), 13_615e6, 10e6, address(executor), address(reactor), d, 0);
+    }
+
+    event VenueUpdated(address indexed target, address indexed spender, bool allowed);
+
+    function test_SetVenue_OwnerOnly_EmitsAndAddsVenueWithoutRedeploy() public {
+        MockTextileReactor dex = new MockTextileReactor();
+        cngn.mint(address(dex), 1e12);
+        usdt.mint(address(dex), 1e12);
+        vm.prank(agent);
+        vm.expectRevert(VaultFactory.NotOwner.selector);
+        factory.setVenue(address(dex), address(dex), true);
+        vm.expectEmit(true, true, false, true, address(factory));
+        emit VenueUpdated(address(dex), address(dex), true);
+        factory.setVenue(address(dex), address(dex), true);
+        assertTrue(factory.isAllowedVenue(address(dex), address(dex)));
+        bytes memory d = _data(address(cngn), address(usdt), 13_615e6, 10_003_674, address(vault));
+        vm.prank(agent);
+        vault.swapViaRfq(address(cngn), address(usdt), 13_615e6, 10e6, address(dex), address(dex), d, 0);
     }
 
     function test_RevertTargetIsSupportedToken() public {
-        factory.setTextileTarget(address(usdt), true);
+        factory.setVenue(address(usdt), address(reactor), true);
         bytes memory d = abi.encodeCall(MockERC20.transfer, (stranger, 1e6));
         vm.prank(agent);
         vm.expectRevert(Vault.NotAllowlisted.selector);
-        vault.swapViaTextile(address(cngn), address(usdt), 13_615e6, 10e6, address(usdt), address(reactor), d, 0);
+        vault.swapViaRfq(address(cngn), address(usdt), 13_615e6, 10e6, address(usdt), address(reactor), d, 0);
     }
 
     function test_RevertPaused() public {
@@ -173,21 +197,20 @@ contract TextileSwapTest is Test {
         uint256 amtIn = 13_615e6;
         bytes memory d = _data(address(cngn), address(usdt), amtIn / 2, 10e6, address(vault));
         vm.prank(agent);
-        vault.swapViaTextile(address(cngn), address(usdt), amtIn, 10e6, address(reactor), address(reactor), d, 0);
+        vault.swapViaRfq(address(cngn), address(usdt), amtIn, 10e6, address(reactor), address(reactor), d, 0);
         assertEq(cngn.allowance(address(vault), address(reactor)), 0);
     }
 
     function test_ApprovalZeroAfterRevert() public {
         RevertingReactor bad = new RevertingReactor();
-        factory.setTextileTarget(address(bad), true);
-        factory.setTextileSpender(address(bad), true);
+        factory.setVenue(address(bad), address(bad), true);
         bytes memory d = abi.encodeCall(
             RevertingReactor.fill, (_order(address(cngn), address(usdt), 13_615e6, 10e6, address(vault)))
         );
         uint256 balBefore = cngn.balanceOf(address(vault));
         vm.prank(agent);
         vm.expectRevert(RevertingReactor.Boom.selector);
-        vault.swapViaTextile(address(cngn), address(usdt), 13_615e6, 10e6, address(bad), address(bad), d, 0);
+        vault.swapViaRfq(address(cngn), address(usdt), 13_615e6, 10e6, address(bad), address(bad), d, 0);
         assertEq(cngn.allowance(address(vault), address(bad)), 0);
         assertEq(cngn.balanceOf(address(vault)), balBefore);
         assertEq(vault.dailySpentUsd(), 0);
@@ -197,8 +220,7 @@ contract TextileSwapTest is Test {
 
     function test_RevertRecipientDiversion() public {
         DivertingReactor dv = new DivertingReactor();
-        factory.setTextileTarget(address(dv), true);
-        factory.setTextileSpender(address(dv), true);
+        factory.setVenue(address(dv), address(dv), true);
         usdt.mint(address(dv), 1e12);
         bytes memory d = abi.encodeCall(
             DivertingReactor.fill,
@@ -206,7 +228,7 @@ contract TextileSwapTest is Test {
         );
         vm.prank(agent);
         vm.expectRevert(Vault.SlippageTooHigh.selector);
-        vault.swapViaTextile(address(cngn), address(usdt), 13_615e6, 10e6, address(dv), address(dv), d, 0);
+        vault.swapViaRfq(address(cngn), address(usdt), 13_615e6, 10e6, address(dv), address(dv), d, 0);
         assertEq(usdt.balanceOf(stranger), 0);
     }
 
@@ -215,14 +237,13 @@ contract TextileSwapTest is Test {
         bytes memory d = _data(address(cngn), address(usdt), 13_616e6, 10_003_674, address(vault));
         vm.prank(agent);
         vm.expectRevert();
-        vault.swapViaTextile(address(cngn), address(usdt), 13_615e6, 10e6, address(reactor), address(reactor), d, 0);
+        vault.swapViaRfq(address(cngn), address(usdt), 13_615e6, 10e6, address(reactor), address(reactor), d, 0);
     }
 
     function test_RevertOtherSupportedBalanceChanges() public {
         vault.addSupportedForTest(address(extra));
         SideEffectReactor fx = new SideEffectReactor();
-        factory.setTextileTarget(address(fx), true);
-        factory.setTextileSpender(address(fx), true);
+        factory.setVenue(address(fx), address(fx), true);
         cngn.mint(address(fx), 1e12);
         usdt.mint(address(fx), 1e12);
         extra.mint(address(fx), 1e18);
@@ -232,7 +253,7 @@ contract TextileSwapTest is Test {
         );
         vm.prank(agent);
         vm.expectRevert(Vault.BalanceMismatch.selector);
-        vault.swapViaTextile(address(cngn), address(usdt), 13_615e6, 10e6, address(fx), address(fx), d, 0);
+        vault.swapViaRfq(address(cngn), address(usdt), 13_615e6, 10e6, address(fx), address(fx), d, 0);
     }
 
     event Swapped(uint256 indexed id, address tokenIn, address tokenOut, uint256 amountIn, uint256 amountOut);
@@ -267,7 +288,7 @@ contract TextileSwapTest is Test {
         bytes memory d = _data(address(usdt), address(cngn), amtIn, out, address(vault));
         vm.prank(agent);
         uint256 got =
-            vault.swapViaTextile(address(usdt), address(cngn), amtIn, out, address(reactor), address(reactor), d, 0);
+            vault.swapViaRfq(address(usdt), address(cngn), amtIn, out, address(reactor), address(reactor), d, 0);
         assertEq(got, out);
     }
 
@@ -339,7 +360,7 @@ contract TextileSwapTest is Test {
         bytes memory d = _data(address(usdt), address(cngn), amtIn, 137_000e6, address(vault));
         vm.prank(agent);
         vm.expectRevert(Vault.TradeTooLarge.selector);
-        vault.swapViaTextile(address(usdt), address(cngn), amtIn, 137_000e6, address(reactor), address(reactor), d, 0);
+        vault.swapViaRfq(address(usdt), address(cngn), amtIn, 137_000e6, address(reactor), address(reactor), d, 0);
     }
 
     function test_RevertDailyLimit() public {
@@ -360,8 +381,7 @@ contract TextileSwapTest is Test {
     function _swapUsd(uint256 amtIn, uint256 minOut, uint256 out, uint256 id) internal returns (uint256) {
         bytes memory d = _data(address(usdt), address(cngn), amtIn, out, address(vault));
         vm.prank(agent);
-        return
-            vault.swapViaTextile(address(usdt), address(cngn), amtIn, minOut, address(reactor), address(reactor), d, id);
+        return vault.swapViaRfq(address(usdt), address(cngn), amtIn, minOut, address(reactor), address(reactor), d, id);
     }
 
     function test_RevertAboveThresholdWithoutApproval() public {

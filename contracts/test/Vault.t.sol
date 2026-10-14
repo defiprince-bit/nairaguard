@@ -205,7 +205,7 @@ contract VaultTest is Test {
         factory.setRouter(address(router), true);
     }
 
-    // propose / approve / reject now live in test/TextileSwap.t.sol (design.md §8).
+    // propose / approve / reject now live in test/RfqSwap.t.sol (design.md §8).
 
     // ── pause / unpause ──────────────────────────────────────────────────
 
