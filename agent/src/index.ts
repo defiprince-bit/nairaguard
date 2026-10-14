@@ -1,9 +1,9 @@
 import { createPublicClient, http } from 'viem';
-import { celo, celoAlfajores } from 'viem/chains';
+import { celo, celoSepolia } from 'viem/chains';
 import { ATTRIBUTION_TAG, NETWORK, RPC_URL } from './config.js';
 
 const client = createPublicClient({
-  chain: NETWORK === 'celo' ? celo : celoAlfajores,
+  chain: NETWORK === 'celo' ? celo : celoSepolia,
   transport: http(RPC_URL),
 });
 

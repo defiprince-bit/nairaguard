@@ -33,7 +33,7 @@ NairaGuard swaps between cNGN and USD₮ on Textile within on-chain limits the u
 
 ## Deploys
 
-`Deploy contracts` workflow (Actions → Run workflow) with `network` = `alfajores` or `celo`. Uses the `DEPLOYER_PRIVATE_KEY` secret; `celo` runs in the `mainnet` environment, which requires manual approval.
+`Deploy contracts` workflow (Actions → Run workflow) with `network` = `celo-sepolia` (testnet, chain 11142220, `celo-sepolia` environment) or `celo`. Uses the `DEPLOYER_PRIVATE_KEY` secret; `celo` runs in the `mainnet` environment, which requires manual approval.
 
 ## Attribution
 
