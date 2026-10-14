@@ -1,4 +1,235 @@
 {
-  "_comment": "Known exchange / on-ramp hot wallets on Celo mainnet. Never treated as one-hop intermediaries (they pay out to many unrelated users). Add only addresses verified via a Blockscout label (celo.blockscout.com) or the exchange's own docs, lowercase, with the source. Left empty for now: no labels verified yet.",
-  "wallets": []
+  "_comment": "Known exchange / on-ramp hot wallets on Celo mainnet. Never treated as one-hop intermediaries (they pay out to many unrelated users). Add only addresses verified via a Blockscout label (celo.blockscout.com) or the exchange's own docs, lowercase, with the source. Left empty for now: no labels verified yet. Blockscout name tags are shared cross-chain labels; an address may be unused on Celo, which is harmless here. Excluded non-hot-wallet tags (deposit addresses of third parties, ENS names, token/admin contracts, bridges).",
+  "wallets": [
+    {
+      "address": "0x3f5ce5fbfe3e9af3971dd833d26ba9b5c936f0be",
+      "label": "Binance",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0x2b5634c42055806a59e9107ed44d43c426e58258",
+      "label": "KuCoin 1",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0x4ad64983349c49defe8d7a4686202d24b25d0ce8",
+      "label": "KuCoin 4",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0xe59cd29be3be4461d79c0881d238cbe87d64595a",
+      "label": "Kucoin 7",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0xec30d02f10353f8efc9601371f56e808751f396f",
+      "label": "KuCoin 11",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0x738cf6903e6c4e699d1c2dd9ab8b67fcdb3121ea",
+      "label": "KuCoin 12",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0x41e29c02713929f800419abe5770faa8a5b4dadc",
+      "label": "KuCoin 16",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0x03e6fa590cadcf15a38e86158e9b3d06ff3399ba",
+      "label": "KuCoin 24",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0xf3f094484ec6901ffc9681bcb808b96bafd0b8a8",
+      "label": "KuCoin 25",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0xebb8ea128bbdff9a1780a4902a9380022371d466",
+      "label": "KuCoin 27",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0x635308e731a878741bfec299e67f5fd28c7553d9",
+      "label": "KuCoin 28",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0x17a30350771d02409046a683b18fe1c13ccfc4a8",
+      "label": "KuCoin 40",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0x71660c4005ba85c37ccec55d0c4493e66fe775d3",
+      "label": "Coinbase 1",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0xb739d0895772dbb71a89a3754a160269068f0d45",
+      "label": "Coinbase 6",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0x4a4e859565d9b563afc8e63641542455cff0dfd2",
+      "label": "Coinbase 7",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0x19ab546e77d0cd3245b2aad46bd80dc4707d6307",
+      "label": "Coinbase 9",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0xc8373edfad6d5c5f600b6b2507f78431c5271ff5",
+      "label": "Coinbase 11",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0x7c195d981abfdc3ddecd2ca0fed0958430488e34",
+      "label": "Coinbase 12",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0x503828976d22510aad0201ac7ec88293211d23da",
+      "label": "Coinbase 12",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0x20fe51a9229eef2cf8ad9e89d91cab9312cf3b7a",
+      "label": "Coinbase 14",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0x9810762578accf1f314320cca5b72506ae7d7630",
+      "label": "Coinbase 16",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0xf491d040110384dbcf7f241ffe2a546513fd873d",
+      "label": "Coinbase 18",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0x05e3a758fdd29d28435019ac453297ea37b61b62",
+      "label": "Coinbase 20",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0x739120ade7ed878fca5bbdb806263a8258fe2360",
+      "label": "Coinbase 22",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0xa656f7d2a93a6f5878aa768f24eb38ec8c827fe2",
+      "label": "Coinbase 26",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0xe68ee8a12c611fd043fb05d65e1548dc1383f2b9",
+      "label": "Coinbase 28",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0xc9aaa6ca0e05b87d53a3e51edbc44b406eeaf299",
+      "label": "Coinbase 30",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0xb5d85cbf7cb3ee0d56b3bb207d5fc4b82f43f511",
+      "label": "Coinbase 44",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0x6321f9f02d9d56261c8c79131ae74d7b427ccaf5",
+      "label": "Coinbase 47",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0x14af92363379f3548958f9de1fb2e6e5df74476e",
+      "label": "Coinbase 50",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0xe3aac971590635f601ea751096f11343c70ebadf",
+      "label": "Coinbase 52",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0x0d0707963952f2fba59dd06f2b425ace40b492fe",
+      "label": "Gate 1",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0x1c4b70a3968436b9a0a9cf5205c787eb81bb558c",
+      "label": "Gate 3",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0x234ee9e35f8e9749a002fc42970d570db716453b",
+      "label": "Gate 4",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0xc882b111a75c0c657fc507c04fbfcd2cc984f071",
+      "label": "Gate 5",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0x05ee546c1a62f90d7acbffd6d846c9c54c7cf94c",
+      "label": "Gate 6",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0xab5c66752a9e8167967685f1450532fb96d5d24f",
+      "label": "HTX 1",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0xd8a83b72377476d0a66683cde20a8aad0b628713",
+      "label": "HTX 11",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0x6748f50f686bfbca6fe8ad62b22228b87f31ff2b",
+      "label": "HTX 12",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0x90e9ddd9d8d5ae4e3763d0cf856c97594dea7325",
+      "label": "HTX 13",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0xdf90c9b995a3b10a5b8570a47101e6c6a29eb945",
+      "label": "MEXC 7",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0x9b64203878f24eb0cdf55c8c6fa7d08ba0cf77e5",
+      "label": "MEXC 10",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0x4982085c9e2f89f2ecb8131eca71afad896e89cb",
+      "label": "MEXC 13",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0x4e3ae00e8323558fa5cac04b152238924aa31b60",
+      "label": "MEXC 15",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0x9642b23ed1e01df1092b92641051881a322f5d4e",
+      "label": "MEXC 16",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    },
+    {
+      "address": "0xfaf17849fb05a11a4e233f221bac99ca43fc83f8",
+      "label": "MEXC 17",
+      "source": "celo.blockscout.com metadata name tag (/api/v2/search), fetched 2026-10-14"
+    }
+  ]
 }
