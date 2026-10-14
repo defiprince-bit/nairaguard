@@ -95,6 +95,45 @@ describe('Task 8a follow-ups', () => {
   });
 });
 
+describe('reject + paging', () => {
+  it('approvals and activity report status "rejected"', async () => {
+    await db.query(`INSERT INTO approvals (vault, onchain_id, token_in, token_out, amount_in, min_out, usd_value, reason, tx_hash, expires_at)
+      VALUES ($1,'5',$2,$3,'1','1','1','big','0xp5','2026-10-15T00:00:00Z')`, [VAULT, CNGN, USDT]);
+    await db.query(`INSERT INTO activity (vault, kind, token_in, token_out, amount_in, min_out, rate, reason, tx_hash, status)
+      VALUES ($1,'propose',$2,$3,'1','1','1500','big','0xp5','confirmed')`, [VAULT, CNGN, USDT]);
+    const { markRejected } = await import('./db.js');
+    await markRejected(db, VAULT, '5', '0xr5', clock);
+    const ap = ((await api().handle({ method: 'GET', url: `/api/vault/${VAULT}/approvals` })).body as any).items;
+    expect(ap[0]).toMatchObject({ id: '5', status: 'rejected', rejectedAt: clock.toISOString() });
+    const act = ((await api().handle({ method: 'GET', url: `/api/vault/${VAULT}/activity` })).body as any).items;
+    expect(act[0]).toMatchObject({ kind: 'swap', status: 'rejected', txHash: '0xp5' });
+  });
+
+  it('pages /activity by (createdAt, id) with nextCursor null on the last page', async () => {
+    // 5 rows; two share a created_at to exercise the id tiebreak.
+    const ts = ['2026-10-14T10:00:00Z', '2026-10-14T11:00:00Z', '2026-10-14T11:00:00Z', '2026-10-14T11:30:00.123456Z', '2026-10-14T12:00:00Z'];
+    for (const t of ts) {
+      await db.query(`INSERT INTO activity (vault, kind, reason, status, created_at) VALUES ($1,'swap','r','confirmed',$2)`, [VAULT, t]);
+    }
+    await db.query(`INSERT INTO activity (vault, kind, reason, status) VALUES ($1,'noop','skip','skipped')`, [VAULT]);
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    let pages = 0;
+    do {
+      const url = `/api/vault/${VAULT}/activity?limit=2${cursor ? `&cursor=${cursor}` : ''}`;
+      const body = (await api().handle({ method: 'GET', url })).body as { items: { id: string }[]; nextCursor: string | null };
+      seen.push(...body.items.map((i) => i.id));
+      cursor = body.nextCursor;
+      pages++;
+    } while (cursor && pages < 10);
+    expect(pages).toBe(3);
+    expect(cursor).toBeNull();
+    expect(seen).toEqual(['5', '4', '3', '2', '1']);
+    const bad = await api().handle({ method: 'GET', url: `/api/vault/${VAULT}/activity?cursor=nope` });
+    expect(bad.status).toBe(400);
+  });
+});
+
 describe('read endpoints', () => {
   it('limits, activity, approvals, agent', async () => {
     const a = api();

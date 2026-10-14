@@ -1,15 +1,16 @@
 import { type Log, parseAbiItem } from 'viem';
-import type { Db } from './db.js';
+import { type Db, markRejected } from './db.js';
 
 export const VAULT_CREATED = parseAbiItem('event VaultCreated(address indexed owner, address indexed vault)');
 export const DEPOSITED = parseAbiItem('event Deposited(address indexed token, uint256 amount, address indexed from)');
+export const SWAP_REJECTED = parseAbiItem('event SwapRejected(uint256 indexed id)');
 
 /** Narrow log reader (satisfied by viem PublicClient). */
 export interface LogReader {
   getBlockNumber(): Promise<bigint>;
   getLogs(args: {
     address: `0x${string}` | `0x${string}`[];
-    event: typeof VAULT_CREATED | typeof DEPOSITED;
+    event: typeof VAULT_CREATED | typeof DEPOSITED | typeof SWAP_REJECTED;
     fromBlock: bigint;
     toBlock: bigint;
   }): Promise<Log[]>;
@@ -34,7 +35,7 @@ type EvLog = Log & { args?: Record<string, unknown> };
  * Incremental scan: new VaultCreated logs → `vaults`, first Deposited per vault → waitlist verification.
  * Cursor (last_scanned_block) is stored in Postgres and advanced per chunk, so restarts resume.
  */
-export async function scanFactory(o: ScanOpts): Promise<{ from: bigint; to: bigint; created: number; deposits: number }> {
+export async function scanFactory(o: ScanOpts): Promise<{ from: bigint; to: bigint; created: number; deposits: number; rejected: number }> {
   const factory = o.factory.toLowerCase();
   const chunk = o.chunk ?? 5_000n;
   const cur = await o.db.query<{ b: string }>(
@@ -43,6 +44,7 @@ export async function scanFactory(o: ScanOpts): Promise<{ from: bigint; to: bigi
   const head = await o.client.getBlockNumber();
   let created = 0;
   let deposits = 0;
+  let rejected = 0;
 
   for (let start = from; start <= head; start += chunk) {
     const end = start + chunk - 1n > head ? head : start + chunk - 1n;
@@ -78,6 +80,13 @@ export async function scanFactory(o: ScanOpts): Promise<{ from: bigint; to: bigi
           await markVerified(o.db, from, 'deposit', l.transactionHash ?? null, o.chainId);
         }
       }
+      const rej = (await o.client.getLogs({
+        address: known.map((k) => k.vault), event: SWAP_REJECTED, fromBlock: start, toBlock: end,
+      })) as EvLog[];
+      for (const l of rej) {
+        const ok = await markRejected(o.db, String(l.address), String(l.args?.id), l.transactionHash ?? null, new Date());
+        if (ok) rejected++;
+      }
     }
 
     await o.db.query(
@@ -85,7 +94,7 @@ export async function scanFactory(o: ScanOpts): Promise<{ from: bigint; to: bigi
        ON CONFLICT (chain_id, factory) DO UPDATE SET last_scanned_block=EXCLUDED.last_scanned_block, updated_at=now()`,
       [o.chainId, factory, String(end)]);
   }
-  return { from, to: head, created, deposits };
+  return { from, to: head, created, deposits, rejected };
 }
 
 /** Mark an existing waitlist row verified by on-chain proof. Never creates rows; never downgrades. */

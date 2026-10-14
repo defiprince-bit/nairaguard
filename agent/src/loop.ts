@@ -1,5 +1,8 @@
 import { type Hex, type Log, decodeEventLog, formatUnits, parseUnits } from 'viem';
-import { type Db, hasPendingApproval, insertActivity, insertApproval, recordRun } from './db.js';
+import {
+  type Db, hasPendingApproval, insertActivity, insertApproval, recentRejection, recordRun,
+  REJECT_COOLDOWN_MS, REJECT_DRIFT_CHANGE_BPS,
+} from './db.js';
 import { decide, type StrategyDecision } from './strategy.js';
 import { logQuote, valueNgn } from './pnl.js';
 import type { RateSource } from './textile.js';
@@ -41,6 +44,8 @@ export type LoopDeps = {
   db: Db;
   now?: () => Date;
   bandBps?: number;
+  /** Wait after an owner rejection before re-proposing the same pair + direction. */
+  rejectCooldownMs?: number;
 };
 
 export type RunResult = { decision: StrategyDecision; txHash?: Hex; skipped?: string };
@@ -83,6 +88,13 @@ export async function runOnce(d: LoopDeps): Promise<RunResult> {
     if (s.paused) return skip('Vault is paused by the owner, so no trade.');
     if (decision.action === 'propose' && (await hasPendingApproval(d.db, d.vault, now))) {
       return skip('A proposal is already waiting for your approval.');
+    }
+    const ngnShareBps = shareBps(s.ngnBalance, s.usdBalance, rate);
+    if (decision.action === 'propose') {
+      const [pin, pout] = decision.direction === 'ngnToUsd' ? [d.cngn, d.usdt] : [d.usdt, d.cngn];
+      const rej = await recentRejection(d.db, d.vault, pin, pout, now, d.rejectCooldownMs ?? REJECT_COOLDOWN_MS);
+      const driftMoved = rej?.ngnShareBps != null && Math.abs(ngnShareBps - rej.ngnShareBps) >= REJECT_DRIFT_CHANGE_BPS;
+      if (rej && !driftMoved) return skip('You declined this trade recently, so the agent is waiting before asking again.');
     }
 
     let usdValue = toUnits(decision.usdValue);
@@ -155,6 +167,7 @@ export async function runOnce(d: LoopDeps): Promise<RunResult> {
               reason: decision.reason,
               txHash: r.hash,
               expiresAt: new Date(Number(ev.args.expiresAt) * 1000),
+              ngnShareBps,
             });
           }
         } catch {
@@ -183,4 +196,11 @@ export function swappedAmountOut(logs: Log[], vault: string): bigint | undefined
     }
   }
   return undefined;
+}
+
+/** cNGN share of vault value in bps at `rate` (₦ per $1). */
+export function shareBps(ngn: bigint, usd: bigint, rate: number): number {
+  const n = toNum(ngn);
+  const total = n + toNum(usd) * rate;
+  return total > 0 ? Math.round((n / total) * 10_000) : 0;
 }

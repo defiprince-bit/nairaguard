@@ -1,22 +1,24 @@
 {
   "network": "celo-sepolia",
   "chainId": 11142220,
-  "deployedAt": "2026-10-14T17:47:00Z",
+  "deployedAt": "2026-10-14T17:52:00Z",
   "deployRun": "local forge script (Task 8a)",
-  "supersedes": "0x4fa967c761eD1ddB642Fe62Fcb9aB7B924Df5310",
+  "supersedes": "0xD6401dAc34b1D8BB9a617407f6bB84DeF9B03dcd",
   "owner": "0x1ab29BDaAc75255501ADBBdcC2150fe4D346C0A7",
   "agent": "0xA2A173A481BC063fEE0EF11c67Fc756DC5f928f4",
   "contracts": {
-    "VaultFactory": "0xD6401dAc34b1D8BB9a617407f6bB84DeF9B03dcd",
-    "VaultImplementation": "0x192810c3f3EfE0a0d21a469C17197455B2Ad2CD2",
+    "VaultFactory": "0x6C5b2087b321F2eb1cCC2BEA915503bAceD608E1",
+    "VaultImplementation": "0x4D3EA937aDD326aBef965918F7c6CeCD8D13567A",
     "MockCNGN": "0xaA3B7364E418deC4Fb147f1BD2d95A4022082aEA",
     "MockUSDT": "0xe123971ec3F56138766272B7b15Ee188fdD0eFf7",
-    "MockSwapRouter": "0xd834aB4e7caDc62f2E27ab6755ED4B22F0461e86"
+    "MockSwapRouter": "0xd834aB4e7caDc62f2E27ab6755ED4B22F0461e86",
+    "TestVault": "0x5cd6960f36E178852D75ACEC9Bf3796F0e21ac89"
   },
-  "factoryDeployBlock": 38716050,
+  "factoryDeployBlock": 38716408,
   "txs": {
-    "VaultImplementation": "0x6570a1303b44a131db2f35b50a5af403add26f472459ed49f2ddc6caf34b92fa",
-    "VaultFactory": "0xa9b86ca50586b04a6466c61066eafc2f000c3352dbc27c3c1272587d67814185",
-    "setRouter": "0x33dd6f91d333eaa716605070573d972b338e669939292840777abb963a28f331"
+    "VaultImplementation": "0x0030861187ce7c7cb72204355dcfb5eb3c0365aa5e5e368e20095644a5405d3a",
+    "VaultFactory": "0x7427eb00fd7410c898187eee9cb2b5cfdd49a0d319d0b884b97df38fb1a174b8",
+    "setRouter": "0x3f03c3e1ede4b12726429eb5365e4ae75d7878bec17887fa2a5b1fd73707566c",
+    "createVault": "0x4af95cf0fa1c664b93652ac044ab5140998b8f93c964cbdffbce3951ef5e0d09"
   }
 }

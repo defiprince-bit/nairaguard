@@ -108,17 +108,39 @@ export function createApi(d: ApiDeps) {
     return json(200, { vault, lastCheckedAt: last ? iso(last.ran_at) : null, ok: last ? last.ok : null });
   }
 
-  async function activity(vault: string) {
-    const r = await d.db.query<Record<string, string | null>>(
-      `SELECT * FROM activity WHERE lower(vault)=$1 AND kind IN ('swap','deposit','withdraw') ORDER BY created_at DESC, id DESC LIMIT 100`,
-      [vault]);
+  /** Keyset paging on (created_at, id), newest first. Cursor = base64url(JSON [created_at text, id]). */
+  async function activity(vault: string, q?: URLSearchParams) {
+    const limit = Math.min(Math.max(Number(q?.get('limit') ?? 50) || 50, 1), 100);
+    let after: [string, string] | null = null;
+    const c = q?.get('cursor');
+    if (c) {
+      try {
+        const v = JSON.parse(Buffer.from(c, 'base64url').toString('utf8'));
+        if (!Array.isArray(v) || typeof v[0] !== 'string' || !/^\d+$/.test(String(v[1]))) throw new Error();
+        after = [v[0], String(v[1])];
+      } catch {
+        return json(400, { error: 'cursor_invalid' });
+      }
+    }
+    // Rejected proposals are shown as rejected trades; other proposals and no-ops stay out of the feed.
+    const r = await d.db.query<Record<string, string | null> & { cur_at: string }>(
+      `SELECT *, created_at::text AS cur_at FROM activity
+       WHERE lower(vault)=$1 AND (kind IN ('swap','deposit','withdraw') OR (kind='propose' AND status='rejected'))
+         AND ($2::timestamptz IS NULL OR (created_at, id) < ($2::timestamptz, $3::bigint))
+       ORDER BY created_at DESC, id DESC LIMIT $4`,
+      [vault, after?.[0] ?? null, after?.[1] ?? '0', limit + 1]);
+    const page = r.rows.slice(0, limit);
+    const last = page[page.length - 1];
+    const nextCursor = r.rows.length > limit && last
+      ? Buffer.from(JSON.stringify([last.cur_at, String(last.id)])).toString('base64url') : null;
     return json(200, {
-      items: r.rows.map((a) => {
+      nextCursor,
+      items: page.map((a) => {
         const rate = Number(a.rate ?? 0);
         const at = a.created_at!;
         const outAmt = a.amount_out; // actual received; null for legacy rows (never minOut)
         return {
-          id: String(a.id), kind: a.kind, reason: a.reason, txHash: a.tx_hash, status: a.status, at: iso(at),
+          id: String(a.id), kind: a.kind === 'propose' ? 'swap' : a.kind, reason: a.reason, txHash: a.tx_hash, status: a.status, at: iso(at),
           in: a.amount_in && rate ? money(sym(a.token_in), a.amount_in, rate, at) : undefined,
           out: outAmt && rate ? money(sym(a.token_out), outAmt, rate, at) : undefined,
           // Actual tokenOut received (base units), from the vault's Swapped event. Null for legacy rows.
@@ -132,7 +154,9 @@ export function createApi(d: ApiDeps) {
   async function approvals(vault: string) {
     const r = await d.db.query<Record<string, string>>(
       `SELECT a.*, (SELECT rate FROM quotes q WHERE q.vault=lower(a.vault) ORDER BY q.created_at DESC LIMIT 1) AS rate
-       FROM approvals a WHERE lower(a.vault)=$1 AND a.status='pending' AND a.expires_at > $2 ORDER BY a.created_at DESC`,
+       FROM approvals a WHERE lower(a.vault)=$1
+         AND ((a.status='pending' AND a.expires_at > $2) OR a.status='rejected')
+       ORDER BY a.created_at DESC LIMIT 100`,
       [vault, now().toISOString()]);
     return json(200, {
       items: r.rows.map((a) => {
@@ -141,6 +165,8 @@ export function createApi(d: ApiDeps) {
           rate > 0 ? money(sym(t), amount, rate, a.created_at) : { token: sym(t), amount, amountNgn: null, amountUsd: null, rate: null, rateAt: null };
         return {
           id: a.onchain_id, reason: a.reason, expiresAt: iso(a.expires_at),
+          status: a.status as 'pending' | 'rejected',
+          rejectedAt: a.rejected_at ? iso(a.rejected_at) : null,
           rateNgnPerUsd: rate > 0 ? String(rate) : null,
           rateNote: rate > 0 ? undefined : 'rate unavailable',
           in: token(a.token_in, a.amount_in),
@@ -287,7 +313,7 @@ export function createApi(d: ApiDeps) {
     try {
       if (req.method === 'GET' && m) {
         const v = m[1]!.toLowerCase();
-        return await ({ balances, activity, approvals, limits, status } as const)[m[2] as 'balances'](v);
+        return m[2] === 'activity' ? await activity(v, u.searchParams) : await ({ balances, approvals, limits, status } as const)[m[2] as 'balances'](v);
       }
       if (req.method === 'GET' && p === '/api/agent') return await agent();
       if (req.method === 'GET' && p === '/api/waitlist/nonce') return await nonce(u.searchParams.get('address'));
