@@ -29,7 +29,7 @@ function shorten(addr: string) {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
-export function WaitlistForm({ lossNgn }: { lossNgn?: number }) {
+export function WaitlistForm() {
   const searchParams = useSearchParams();
   const source = useMemo(() => {
     const raw = searchParams.get('source') ?? '';
@@ -138,22 +138,6 @@ export function WaitlistForm({ lossNgn }: { lossNgn?: number }) {
 
   return (
     <form onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {lossNgn != null && Number.isFinite(lossNgn) ? (
-        <div
-          style={{
-            background: 'var(--warn-soft)',
-            border: '1px solid #f0d7a8',
-            borderRadius: 'var(--radius-card)',
-            padding: 16,
-            color: 'var(--warn)',
-          }}
-        >
-          <p style={{ margin: 0 }} className="tabular">
-            ₦500,000 held in naira lost about ₦{lossNgn.toLocaleString('en-NG')} when the rate moved last
-            month.
-          </p>
-        </div>
-      ) : null}
 
       <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <span className="small" style={{ fontWeight: 600 }}>
@@ -164,8 +148,8 @@ export function WaitlistForm({ lossNgn }: { lossNgn?: number }) {
           value={contact}
           onChange={(e) => setContact(e.target.value)}
           placeholder="you@email.com or +234…"
-          inputMode="email"
-          autoComplete="email"
+          inputMode={/^[+\d]/.test(contact) ? 'tel' : 'email'}
+          autoComplete={/^[+\d]/.test(contact) ? 'tel' : 'email'}
           style={{
             minHeight: 44,
             padding: '10px 12px',

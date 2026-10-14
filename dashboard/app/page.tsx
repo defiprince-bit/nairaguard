@@ -26,6 +26,24 @@ export default function Home() {
         explains every trade in plain English.
       </p>
 
+      {LOSS_NGN != null && Number.isFinite(LOSS_NGN) ? (
+        <div
+          style={{
+            background: 'var(--warn-soft)',
+            border: '1px solid #f0d7a8',
+            borderRadius: 'var(--radius-card)',
+            padding: 16,
+            marginBottom: 16,
+            color: 'var(--warn)',
+          }}
+        >
+          <p style={{ margin: 0 }} className="tabular">
+            ₦500,000 held in naira lost about ₦{LOSS_NGN.toLocaleString('en-NG')} when the rate moved last
+            month.
+          </p>
+        </div>
+      ) : null}
+
       <div
         style={{
           background: 'var(--surface)',
@@ -43,7 +61,7 @@ export default function Home() {
             </div>
           }
         >
-          <WaitlistForm lossNgn={LOSS_NGN} />
+          <WaitlistForm />
         </Suspense>
       </div>
     </main>
