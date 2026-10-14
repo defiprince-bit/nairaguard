@@ -448,4 +448,44 @@ contract VaultTest is Test {
             assertEq(vault.dailySpentUsd(), first + second);
         }
     }
+
+    // ── ownership transfer (Ownable2Step) ───────────────────────────────
+
+    function test_TransferOwnership_TwoStep() public {
+        address next = makeAddr("nextOwner");
+        vault.transferOwnership(next);
+        assertEq(vault.pendingOwner(), next);
+        assertEq(vault.owner(), owner);
+
+        vm.prank(next);
+        vault.acceptOwnership();
+        assertEq(vault.owner(), next);
+        assertEq(vault.pendingOwner(), address(0));
+
+        // previous owner lost access
+        vm.expectRevert(Vault.NotOwner.selector);
+        vault.pause();
+        // new owner works
+        vm.prank(next);
+        vault.pause();
+        assertTrue(vault.paused());
+    }
+
+    function test_TransferOwnership_OnlyOwner() public {
+        vm.prank(agent);
+        vm.expectRevert(Vault.NotOwner.selector);
+        vault.transferOwnership(makeAddr("x"));
+    }
+
+    function test_AcceptOwnership_OnlyPending() public {
+        vault.transferOwnership(makeAddr("next"));
+        vm.prank(makeAddr("stranger"));
+        vm.expectRevert(Vault.NotOwner.selector);
+        vault.acceptOwnership();
+    }
+
+    function test_TransferOwnership_RevertZero() public {
+        vm.expectRevert(Vault.ZeroAddress.selector);
+        vault.transferOwnership(address(0));
+    }
 }

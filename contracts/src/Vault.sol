@@ -38,6 +38,7 @@ contract Vault {
     }
 
     address public owner;
+    address public pendingOwner;
     address public agent;
     address public textileRouter;
 
@@ -84,6 +85,8 @@ contract Vault {
         uint16 targetNgnBps
     );
     event Paused(bool isPaused);
+    event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
     event AgentUpdated(address indexed agent);
     event SwapRouterUpdated(address indexed router, bool allowed);
 
@@ -101,6 +104,7 @@ contract Vault {
         if (_agent == address(0) || tokenA == address(0) || tokenB == address(0)) revert ZeroAddress();
         owner = msg.sender;
         agent = _agent;
+        emit OwnershipTransferred(address(0), msg.sender);
         supported[tokenA] = true;
         supported[tokenB] = true;
         dayStart = block.timestamp;
@@ -161,6 +165,23 @@ contract Vault {
     function unpause() external onlyOwner {
         paused = false;
         emit Paused(false);
+    }
+
+    /// @notice Start a two-step ownership transfer. New owner must call acceptOwnership.
+    function transferOwnership(address newOwner) external onlyOwner {
+        if (newOwner == address(0)) revert ZeroAddress();
+        pendingOwner = newOwner;
+        emit OwnershipTransferStarted(owner, newOwner);
+    }
+
+    /// @notice Complete ownership transfer. Caller must be pendingOwner.
+    function acceptOwnership() external {
+        address newOwner = pendingOwner;
+        if (msg.sender != newOwner) revert NotOwner();
+        address old = owner;
+        owner = newOwner;
+        pendingOwner = address(0);
+        emit OwnershipTransferred(old, newOwner);
     }
 
     /// @notice Agent swap below the approval threshold. Enforces router, trade, daily, and slippage limits.
