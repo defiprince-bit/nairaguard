@@ -88,3 +88,16 @@ Text contrast is at least 4.5:1. Never use colour alone for status, so chips car
 3. Wallet connection, including MiniPay auto-connect.
 4. Overview, then Activity, Approvals and Limits.
 5. A polish pass of empty and error states plus a real-device check in MiniPay.
+
+## Task 8b UI (approval window, venue, reference feed)
+
+- **Approvals** (`status` from `GET /vault/:a/approvals`): Approving calls `Vault.approve(id)`, which opens a **30-minute window**; it does not trade immediately. Helper under the buttons: "Approving gives the agent 30 minutes to trade at your limit or better. If the price never gets there, nothing trades."
+  - `pending`: "Swap ~$X to USD₮ · at ₦<floor>/$ or better" (floor from `approvedMinOut`/`minOut` vs the input leg), countdown, Approve/Reject.
+  - `approved`: chip "Approved", "Approved · trading within <countdown> at ₦<floor>/$ or better" (countdown from `expiresAt`, which is the window end).
+  - `executed`: "Traded at ₦<rate>/$" + explorer link (`executedTx`).
+  - `expired` after approval: "Didn't trade, price never reached your limit" (neutral grey, never an error). Expired before approval: "Expired, nothing was traded".
+  - `rejected`: unchanged.
+  - The Overview banner uses the same lines; pending first, approved shows the window countdown with no buttons.
+- **Activity**: confirmed swaps show a small line from `venue`: "via Textile FX" (`textile`), "via Celo pool" (pool labels), else "via <label>". On Sepolia (`NEXT_PUBLIC_NETWORK != celo`) it reads "Test swap (mock exchange)". Quote outcomes shown quietly in grey: `price_moved` → "Price moved, didn't trade"; `no_quote` → "No offer from the exchange right now. Will try again next check."
+- **Overview**: "Naira rate today" stays the tradable rate. Tapping it reveals "Official rate ₦<feedRate>/$ · updated N min ago" from `/status`. Agent card: `paused: "stale_price"` → "Paused, waiting for a fresh naira price."; `paused: "owner"` → "Paused by you…".
+- **Limits** (when the per-trade input lands): hint "Smallest trade is about $1." with `perTradeError` validation in `lib/format.ts`.

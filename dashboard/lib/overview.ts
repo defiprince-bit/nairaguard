@@ -3,7 +3,7 @@ import { createPublicClient, formatUnits, http, parseAbi } from 'viem';
 import { celo, celoSepolia } from 'viem/chains';
 import { FACTORY_ADDRESS, factoryAbi } from './vault';
 import type { ApiLimits } from './overviewView';
-import type { ActivityItem, AgentStatus, ApprovalItem, BalancesResponse, Money } from './types';
+import type { ActivityItem, AgentStatus, ApprovalItem, BalancesResponse, Money, VaultStatus } from './types';
 
 export const CHAIN = process.env.NEXT_PUBLIC_NETWORK === 'celo' ? celo : celoSepolia;
 const erc20 = parseAbi(['function balanceOf(address) view returns (uint256)', 'function decimals() view returns (uint8)']);
@@ -89,6 +89,9 @@ export type OverviewData = {
   vaultCheckedAt: string | null;
   vaultCheckOk: boolean | null;
   apiDown: boolean;
+  feedRate: string | null;
+  feedUpdatedAt: string | null;
+  paused: VaultStatus['paused'];
 };
 
 export async function loadOverview(vault: `0x${string}`): Promise<OverviewData> {
@@ -100,7 +103,7 @@ export async function loadOverview(vault: `0x${string}`): Promise<OverviewData> 
     getJson<{ items: ApprovalItem[] }>(`vault/${v}/approvals`).catch(() => null),
     getJson<AgentStatus>('agent').catch(() => null),
     getJson<ApiLimits>(`vault/${v}/limits`).catch(() => null),
-    getJson<{ lastCheckedAt: string | null; ok: boolean | null }>(`vault/${v}/status`).catch(() => null),
+    getJson<VaultStatus>(`vault/${v}/status`).catch(() => null),
   ]);
   // Dev mock mode (AGENT_API_URL unset locally): use the mock balances instead of chain reads.
   const chain = bal?.mock ? null : chainRaw;
@@ -120,5 +123,8 @@ export async function loadOverview(vault: `0x${string}`): Promise<OverviewData> 
     vaultCheckedAt: st?.ok ? st.data?.lastCheckedAt ?? null : null,
     vaultCheckOk: st?.ok ? st.data?.ok ?? null : null,
     apiDown,
+    feedRate: st?.ok ? st.data?.feedRate ?? null : null,
+    feedUpdatedAt: st?.ok ? st.data?.feedUpdatedAt ?? null : null,
+    paused: st?.ok ? st.data?.paused ?? null : null,
   };
 }

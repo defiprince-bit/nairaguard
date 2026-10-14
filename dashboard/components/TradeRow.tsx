@@ -1,7 +1,7 @@
 import { AmountText } from './AmountText';
 import { StatusChip } from './StatusChip';
 import type { ActivityItem } from '../lib/types';
-import { noRate, rejectedLabel, tradeOut, txUrl } from '../lib/format';
+import { noRate, quoteOutcomeLine, rejectedLabel, tradeOut, txUrl, venueLine } from '../lib/format';
 
 
 function mapStatus(s: ActivityItem['status']): 'pending' | 'executed' | 'failed' | 'rejected' {
@@ -87,6 +87,12 @@ export function TradeRow({ item }: { item: ActivityItem }) {
       <p className="small" style={{ margin: '0 0 6px', color: 'var(--ink-muted)' }}>
         {item.reason}
       </p>
+      {item.kind === 'swap' && item.status === 'confirmed' && venueLine(item.venue) ? (
+        <p className="small" style={{ margin: '0 0 6px', color: 'var(--ink-muted)', fontSize: 12 }}>{venueLine(item.venue)}</p>
+      ) : null}
+      {quoteOutcomeLine(item.outcome) ? (
+        <p className="small" style={{ margin: '0 0 6px', color: 'var(--ink-muted)' }}>{quoteOutcomeLine(item.outcome)}</p>
+      ) : null}
       <p className="small" style={{ margin: 0, color: 'var(--ink-muted)' }}>
         {item.status === 'rejected' ? rejectedLabel(item.at) : timeLabel(item.at)}
         {item.txHash ? <> · <span style={{ textDecoration: 'underline' }}>View on explorer ↗</span></> : null}

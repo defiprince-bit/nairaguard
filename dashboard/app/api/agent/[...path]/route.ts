@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { mockActivity, mockAgent, mockApprovals, mockBalances } from '../../../../lib/mock';
 
-/** Read-only proxy to the agent API (AGENT_API_URL). Only /agent and /vault/<addr>/<balances|activity|approvals|limits>. */
+/** Read-only proxy to the agent API (AGENT_API_URL). Only /agent and /vault/<addr>/<balances|activity|approvals|limits|status>. */
 const ALLOWED = /^(agent|vault\/0x[0-9a-fA-F]{40}\/(balances|activity|approvals|limits|status))$/;
 
 function mock(path: string) {
   if (path === 'agent') return mockAgent;
   if (path.endsWith('/balances')) return { ...mockBalances, pnlNgn: '12500.00', pnlUsd: '7.89', pnlSince: new Date(Date.now() - 3 * 864e5).toISOString() };
   if (path.endsWith('/activity')) return { items: mockActivity, nextCursor: null };
-  if (path.endsWith('/status')) return { vault: path.split('/')[1], lastCheckedAt: new Date(Date.now() - 2 * 60_000).toISOString(), ok: true };
+  if (path.endsWith('/status')) return { vault: path.split('/')[1], lastCheckedAt: new Date(Date.now() - 2 * 60_000).toISOString(), ok: true, feedRate: '1330.00', feedUpdatedAt: new Date(Date.now() - 4 * 60_000).toISOString(), paused: process.env.MOCK_PAUSED === '1' ? 'stale_price' : null };
   if (path.endsWith('/approvals')) return { items: mockApprovals };
   if (path.endsWith('/limits')) {
     const e = (n: number) => (BigInt(n) * 10n ** 18n).toString();

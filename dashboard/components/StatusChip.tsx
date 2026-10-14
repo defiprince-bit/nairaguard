@@ -1,7 +1,8 @@
-type Status = 'pending' | 'executed' | 'failed' | 'expired' | 'rejected';
+type Status = 'pending' | 'approved' | 'executed' | 'failed' | 'expired' | 'rejected';
 
 const map: Record<Status, { label: string; bg: string; fg: string }> = {
   pending: { label: 'Pending', bg: 'var(--warn-soft)', fg: 'var(--warn)' },
+  approved: { label: 'Approved', bg: 'var(--brand-soft)', fg: 'var(--brand)' },
   executed: { label: 'Executed', bg: 'var(--brand-soft)', fg: 'var(--brand)' },
   failed: { label: 'Failed', bg: 'var(--danger-soft)', fg: 'var(--danger)' },
   expired: { label: 'Expired', bg: 'var(--border)', fg: 'var(--ink-muted)' },
