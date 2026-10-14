@@ -135,16 +135,6 @@ contract VaultTest is Test {
         vault.swap(address(cngn), address(usdt), amountIn, minOut, 21e18);
     }
 
-    function test_Propose_RevertTradeTooLarge() public {
-        _depositBoth(1_000e18);
-        uint256 amountIn = 10e18;
-        uint256 minOut = _minOut(address(cngn), address(usdt), amountIn);
-
-        vm.prank(agent);
-        vm.expectRevert(Vault.TradeTooLarge.selector);
-        vault.proposeSwap(address(cngn), address(usdt), amountIn, minOut, MAX_TRADE + 1);
-    }
-
     function test_Swap_RevertDailyLimit() public {
         _depositBoth(10_000e18);
         uint256 amountIn = 10e18;
@@ -215,156 +205,7 @@ contract VaultTest is Test {
         factory.setRouter(address(router), true);
     }
 
-    // ── propose / approve / expiry / double-execute ──────────────────────
-
-    function test_ProposeAndApprove() public {
-        _depositBoth(1_000e18);
-        uint256 amountIn = 60e18;
-        uint256 minOut = _minOut(address(cngn), address(usdt), amountIn);
-        uint256 usdValue = THRESHOLD; // at threshold → must propose
-
-        vm.prank(agent);
-        uint256 id = vault.proposeSwap(address(cngn), address(usdt), amountIn, minOut, usdValue);
-        assertEq(id, 1);
-
-        (,,,,, bool executed) = vault.approvals(id);
-        assertFalse(executed);
-
-        uint256 amountOut = vault.approve(id);
-        assertGe(amountOut, minOut);
-        assertEq(vault.dailySpentUsd(), usdValue);
-
-        (,,,,, executed) = vault.approvals(id);
-        assertTrue(executed);
-    }
-
-    function _propose() internal returns (uint256 id) {
-        _depositBoth(1_000e18);
-        uint256 amountIn = 60e18;
-        uint256 minOut = _minOut(address(cngn), address(usdt), amountIn);
-        vm.prank(agent);
-        id = vault.proposeSwap(address(cngn), address(usdt), amountIn, minOut, THRESHOLD);
-    }
-
-    event SwapRejected(uint256 indexed id);
-
-    function test_Reject_EmitsAndBlocksApprove() public {
-        uint256 id = _propose();
-        uint256 bal = cngn.balanceOf(address(vault));
-        vm.expectEmit(true, false, false, false, address(vault));
-        emit SwapRejected(id);
-        vault.reject(id);
-        assertTrue(vault.rejected(id));
-        vm.expectRevert(Vault.ApprovalRejected.selector);
-        vault.approve(id);
-        assertEq(cngn.balanceOf(address(vault)), bal);
-    }
-
-    function test_Reject_RevertTwice() public {
-        uint256 id = _propose();
-        vault.reject(id);
-        vm.expectRevert(Vault.ApprovalRejected.selector);
-        vault.reject(id);
-    }
-
-    function test_Reject_OnlyOwner() public {
-        uint256 id = _propose();
-        vm.prank(agent);
-        vm.expectRevert(Vault.NotOwner.selector);
-        vault.reject(id);
-    }
-
-    function test_Reject_RevertNotPending() public {
-        uint256 id = _propose();
-        vm.expectRevert(Vault.ApprovalNotFound.selector);
-        vault.reject(id + 1);
-        vault.approve(id);
-        vm.expectRevert(Vault.ApprovalAlreadyExecuted.selector);
-        vault.reject(id);
-    }
-
-    function test_Reject_RevertExpired() public {
-        uint256 id = _propose();
-        vm.warp(block.timestamp + 1 days + 1);
-        vm.expectRevert(Vault.ApprovalExpired.selector);
-        vault.reject(id);
-    }
-
-    function test_Propose_RevertBelowThreshold() public {
-        _depositBoth(1_000e18);
-        uint256 amountIn = 10e18;
-        uint256 minOut = _minOut(address(cngn), address(usdt), amountIn);
-
-        vm.prank(agent);
-        vm.expectRevert(Vault.BelowApprovalThreshold.selector);
-        vault.proposeSwap(address(cngn), address(usdt), amountIn, minOut, THRESHOLD - 1);
-    }
-
-    function test_Approve_RevertExpired() public {
-        _depositBoth(1_000e18);
-        uint256 amountIn = 60e18;
-        uint256 minOut = _minOut(address(cngn), address(usdt), amountIn);
-
-        vm.prank(agent);
-        uint256 id = vault.proposeSwap(address(cngn), address(usdt), amountIn, minOut, THRESHOLD);
-
-        vm.warp(block.timestamp + vault.APPROVAL_TTL() + 1);
-
-        vm.expectRevert(Vault.ApprovalExpired.selector);
-        vault.approve(id);
-    }
-
-    function test_Approve_RevertDoubleExecute() public {
-        _depositBoth(1_000e18);
-        uint256 amountIn = 60e18;
-        uint256 minOut = _minOut(address(cngn), address(usdt), amountIn);
-
-        vm.prank(agent);
-        uint256 id = vault.proposeSwap(address(cngn), address(usdt), amountIn, minOut, THRESHOLD);
-        vault.approve(id);
-
-        vm.expectRevert(Vault.ApprovalAlreadyExecuted.selector);
-        vault.approve(id);
-    }
-
-    function test_Propose_RevertPaused() public {
-        _depositBoth(1_000e18);
-        vault.pause();
-        uint256 amountIn = 60e18;
-        uint256 minOut = _minOut(address(cngn), address(usdt), amountIn);
-
-        vm.prank(agent);
-        vm.expectRevert(Vault.VaultPaused.selector);
-        vault.proposeSwap(address(cngn), address(usdt), amountIn, minOut, THRESHOLD);
-    }
-
-    function test_Approve_RevertPaused() public {
-        _depositBoth(1_000e18);
-        uint256 amountIn = 60e18;
-        uint256 minOut = _minOut(address(cngn), address(usdt), amountIn);
-        vm.prank(agent);
-        uint256 id = vault.proposeSwap(address(cngn), address(usdt), amountIn, minOut, THRESHOLD);
-        vault.pause();
-        vm.expectRevert(Vault.VaultPaused.selector);
-        vault.approve(id);
-    }
-
-    function test_Approve_RevertDailyLimit() public {
-        _depositBoth(100_000e18);
-        uint256 amountIn = MAX_TRADE;
-        uint256 minOut = _minOut(address(cngn), address(usdt), amountIn);
-        uint256 n = MAX_DAILY / MAX_TRADE + 1;
-        uint256[] memory ids = new uint256[](n);
-        for (uint256 i; i < n; i++) {
-            vm.prank(agent);
-            ids[i] = vault.proposeSwap(address(cngn), address(usdt), amountIn, minOut, MAX_TRADE);
-        }
-        for (uint256 i; i < n - 1; i++) {
-            vault.approve(ids[i]);
-        }
-        vm.expectRevert(Vault.DailyLimitExceeded.selector);
-        vault.approve(ids[n - 1]);
-    }
+    // propose / approve / reject now live in test/TextileSwap.t.sol (design.md §8).
 
     // ── pause / unpause ──────────────────────────────────────────────────
 
@@ -424,19 +265,6 @@ contract VaultTest is Test {
     function test_OwnerCanSetAgent() public {
         vault.setAgent(stranger);
         assertEq(vault.agent(), stranger);
-    }
-
-    function test_Approve_OnlyOwner() public {
-        _depositBoth(1_000e18);
-        uint256 amountIn = 60e18;
-        uint256 minOut = _minOut(address(cngn), address(usdt), amountIn);
-
-        vm.prank(agent);
-        uint256 id = vault.proposeSwap(address(cngn), address(usdt), amountIn, minOut, THRESHOLD);
-
-        vm.prank(stranger);
-        vm.expectRevert(Vault.NotOwner.selector);
-        vault.approve(id);
     }
 
     function test_Pause_OnlyOwner() public {

@@ -147,9 +147,6 @@ contract VaultFactoryTest is Test {
         vm.prank(agent);
         vm.expectRevert(Vault.RouterNotAllowed.selector);
         v.swap(address(cngn), address(usdt), 10e18, 9.9e18, 10e18);
-        vm.prank(agent);
-        vm.expectRevert(Vault.RouterNotAllowed.selector);
-        v.proposeSwap(address(cngn), address(usdt), 10e18, 9.9e18, 60e18);
     }
 
     function test_SetRouterFalse_OnlyClearsMatchingActiveRouter() public {
