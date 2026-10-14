@@ -158,6 +158,13 @@ Or in SQL: `INSERT INTO excluded_wallets (address, reason, note) VALUES (lower('
 - Fees paid in stablecoin (fee currency) so users don't need CELO. **TBD**: confirm MiniPay's current requirements before Task 6.
 - HTTPS only (Vercel previews per PR).
 
+### Browser wallets (Valora, MetaMask, WalletConnect)
+- These need no contract changes. The vault owner is whoever calls `createVault`.
+- Outside MiniPay, wallets confirm their waitlist entry with SIWE. Inside MiniPay it's still join-only, verified on the first tagged deposit.
+- Every connector must tag `createVault`, approve and deposit, and a test checks that.
+- Later, Google or email sign-in must use plain embedded-account wallets, not smart accounts, so the tag stays on the user's own transaction.
+- Stats keep independent users (Celo activity before 6 Oct) separate from first-time Celo users.
+
 ## 6. ERC-8004 and attribution
 Source: [Celo ERC-8004 docs](https://docs.celo.org/build/agents/8004).
 - Agent wallet: `0xa2a173a481bc063fee0ef11c67fc756dc5f928f4`. It registers, so it owns the identity (hard to undo). Use only this wallet.
