@@ -40,7 +40,7 @@ export function BalanceCard({ data }: { data: BalancesResponse }) {
           amountUsd={totalUsd}
           size="display"
           rate={rate ? Number(rate) : undefined}
-          rateAt={rateAt}
+          rateAt={rateAt ?? undefined}
         />
       </div>
 

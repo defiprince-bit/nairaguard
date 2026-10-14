@@ -90,3 +90,32 @@ describe('approve tx', () => {
     expect(d.args[0]).toBe(7n);
   });
 });
+
+import { buildRejectSwap, vaultRejectAbi, REJECT_HELPER } from './approve';
+import { rejectedLabel, noRate, tokenUnits } from './format';
+import { activityPath } from '../components/ActivityList';
+
+describe('reject + rate-unavailable', () => {
+  it('encodes Vault.reject(id) with the attribution tag', () => {
+    const tx = buildRejectSwap('0x2222222222222222222222222222222222222222', 9n);
+    expect(tx.data.toLowerCase().endsWith(ATTRIBUTION_SUFFIX.slice(2).toLowerCase())).toBe(true);
+    const d = decodeFunctionData({ abi: vaultRejectAbi, data: tx.data.slice(0, 2 + 8 + 64) as `0x${string}` });
+    expect(d.functionName).toBe('reject');
+    expect(d.args[0]).toBe(9n);
+  });
+  it('helper copy', () => expect(REJECT_HELPER).toBe('Got it. The agent won\u2019t suggest this again for about 6 hours unless the naira moves a lot.'));
+  it('rejected label', () => {
+    expect(rejectedLabel(null)).toBe('You rejected this');
+    expect(rejectedLabel('2026-10-14T17:02:00Z')).toMatch(/^You rejected this · 14 Oct, \d\d:02$/);
+  });
+  it('null money → rate unavailable; token units', () => {
+    expect(noRate({ amountNgn: null, amountUsd: null })).toBe(true);
+    expect(noRate({ amountNgn: '1', amountUsd: '1' })).toBe(false);
+    expect(noRate(undefined)).toBe(true);
+    expect(tokenUnits({ token: 'cNGN', amount: '120000000000000000000000' })).toBe('120,000 cNGN');
+  });
+  it('activity paging path', () => {
+    expect(activityPath('0xAB', null)).toBe('vault/0xab/activity?limit=20');
+    expect(activityPath('0xab', 'a+b/=')).toBe('vault/0xab/activity?limit=20&cursor=a%2Bb%2F%3D');
+  });
+});

@@ -86,18 +86,21 @@ export type OverviewData = {
   approvals: ApprovalItem[];
   agent: AgentStatus | null;
   limits: ApiLimits | null;
+  vaultCheckedAt: string | null;
+  vaultCheckOk: boolean | null;
   apiDown: boolean;
 };
 
 export async function loadOverview(vault: `0x${string}`): Promise<OverviewData> {
   const v = vault.toLowerCase();
-  const [chainRaw, bal, act, appr, agent, lim] = await Promise.all([
+  const [chainRaw, bal, act, appr, agent, lim, st] = await Promise.all([
     FACTORY_ADDRESS ? readVaultBalances(vault).catch(() => null) : Promise.resolve(null),
     getJson<ApiBalances>(`vault/${v}/balances`).catch(() => null),
-    getJson<{ items: ActivityItem[] }>(`vault/${v}/activity`).catch(() => null),
+    getJson<{ items: ActivityItem[] }>(`vault/${v}/activity?limit=5`).catch(() => null),
     getJson<{ items: ApprovalItem[] }>(`vault/${v}/approvals`).catch(() => null),
     getJson<AgentStatus>('agent').catch(() => null),
     getJson<ApiLimits>(`vault/${v}/limits`).catch(() => null),
+    getJson<{ lastCheckedAt: string | null; ok: boolean | null }>(`vault/${v}/status`).catch(() => null),
   ]);
   // Dev mock mode (AGENT_API_URL unset locally): use the mock balances instead of chain reads.
   const chain = bal?.mock ? null : chainRaw;
@@ -113,6 +116,9 @@ export async function loadOverview(vault: `0x${string}`): Promise<OverviewData> 
     approvals: appr?.ok ? appr.data?.items ?? [] : [],
     agent: agent?.ok ? agent.data : null,
     limits: lim?.ok ? lim.data : null,
+    /** Per-vault last agent check from /api/vault/:address/status (preferred over the global lastRunAt). */
+    vaultCheckedAt: st?.ok ? st.data?.lastCheckedAt ?? null : null,
+    vaultCheckOk: st?.ok ? st.data?.ok ?? null : null,
     apiDown,
   };
 }

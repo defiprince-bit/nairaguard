@@ -1,5 +1,24 @@
 import type { ActivityItem, ApprovalItem, Money } from './types';
 
+/** Token units from raw 18-decimal base units (the API's amounts), for when there's no rate. */
+export function tokenUnits(m: { token: 'cNGN' | 'USDT'; amount: string }) {
+  let n = 0;
+  try { n = Number(BigInt(m.amount)) / 1e18; } catch { /* ignore */ }
+  return `${n.toLocaleString('en-US', { maximumFractionDigits: 2 })} ${m.token === 'cNGN' ? 'cNGN' : 'USD₮'}`;
+}
+
+/** "You rejected this · 14 Oct, 18:02" (time omitted if unknown). */
+export function rejectedLabel(at: string | null | undefined) {
+  if (!at) return 'You rejected this';
+  const d = new Date(at);
+  if (Number.isNaN(+d)) return 'You rejected this';
+  return `You rejected this · ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}, ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
+}
+
+/** True when a Money has no usable ₦/$ values. */
+export const noRate = (m?: { amountNgn: string | null; amountUsd: string | null } | null) =>
+  !m || m.amountNgn == null || m.amountUsd == null;
+
 export const EXPLORER =
   process.env.NEXT_PUBLIC_NETWORK === 'celo' ? 'https://celoscan.io' : 'https://celo-sepolia.blockscout.com';
 export const txUrl = (hash: string) => `${EXPLORER}/tx/${hash}`;
@@ -37,6 +56,7 @@ export function tradeOut(item: ActivityItem): { money: Money; atLeast: boolean }
   const a = item.amountOut;
   if (a && typeof a === 'object') return { money: a, atLeast: false };
   if (typeof a === 'string' && a !== '' && item.out) {
+    if (item.out.amount === a) return { money: item.out, atLeast: false };
     const base = Number(item.out.amount);
     const ratio = base > 0 ? Number(a) / base : 0;
     return {
@@ -65,6 +85,7 @@ export type Filter = 'all' | 'executed' | 'pending' | 'failed';
 export function matchesFilter(item: ActivityItem, f: Filter) {
   if (f === 'all') return true;
   if (f === 'executed') return item.status === 'confirmed';
+  if (f === 'failed') return item.status === 'failed' || item.status === 'rejected';
   return item.status === f;
 }
 

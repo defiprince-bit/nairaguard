@@ -7,10 +7,10 @@ import { BottomNav, NAV_ITEMS } from './BottomNav';
 import { ErrorBanner } from './ErrorBanner';
 import { Skeleton } from './Skeleton';
 import { DepositSheet, WithdrawSheet } from './MoneySheet';
-import { dismissedKey, friendly } from './ApprovalsList';
+import { friendly } from './ApprovalsList';
 import s from './Overview.module.css';
-import { sendApproveSwap } from '../lib/approve';
-import { approvalRate, formatCountdown, lastCheck, msLeft, tradeOut, txUrl } from '../lib/format';
+import { REJECT_HELPER, sendApproveSwap, sendRejectSwap } from '../lib/approve';
+import { approvalRate, noRate, tokenUnits, formatCountdown, lastCheck, msLeft, tradeOut, txUrl } from '../lib/format';
 import { loadOverview, type OverviewBalances } from '../lib/overview';
 import { type ApiLimits, initials, pnlPct, presetFor, ringDash, signedMoney, splitAmount, usd18 } from '../lib/overviewView';
 import { shorten } from '../lib/wallet';
@@ -20,12 +20,12 @@ import type { ActivityItem, AgentStatus, ApprovalItem } from '../lib/types';
 type Cur = 'NGN' | 'USD';
 const NETWORK_LABEL = process.env.NEXT_PUBLIC_NETWORK === 'celo' ? 'Celo' : 'Celo Sepolia';
 
-function agentLine(agent: AgentStatus | null, vaultCheckedAt?: string | null) {
+function agentLine(agent: AgentStatus | null, vaultCheckedAt?: string | null, vaultOk?: boolean | null) {
   if (!agent && !vaultCheckedAt) return null;
   const last = lastCheck(vaultCheckedAt ?? agent?.lastCheckedAt, agent?.lastRunAt);
   if (!last) return { text: 'Agent not run yet', warn: true };
   const mins = Math.round((Date.now() - new Date(last).getTime()) / 60_000);
-  if (mins > 15 || (agent ? !agent.healthy : false)) return { text: `Agent quiet · last check ${mins} min ago`, warn: true };
+  if (mins > 15 || vaultOk === false || (vaultCheckedAt ? false : agent ? !agent.healthy : false)) return { text: `Agent quiet · last check ${mins} min ago`, warn: true };
   return { text: `Agent active · last check ${Math.max(1, mins)} min ago`, warn: false };
 }
 
@@ -56,37 +56,44 @@ function Eye({ hidden }: { hidden: boolean }) {
   );
 }
 
-function ApprovalBanner({ item, owner, vault, onDone, onReject }: { item: ApprovalItem; owner: `0x${string}`; vault: `0x${string}`; onDone: () => void; onReject: () => void }) {
+function ApprovalBanner({ item, owner, vault, onDone }: { item: ApprovalItem; owner: `0x${string}`; vault: `0x${string}`; onDone: () => void }) {
   const [now, setNow] = useState(() => Date.now());
-  const [state, setState] = useState<'idle' | 'waiting' | 'ok' | 'error'>('idle');
+  const [state, setState] = useState<'idle' | 'waiting' | 'rejecting' | 'ok' | 'rejected' | 'error'>('idle');
   const [msg, setMsg] = useState<string | null>(null);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
   const left = msLeft(item.expiresAt, now);
   const expired = left <= 0;
   const rate = approvalRate(item);
   const to = item.minOut.token === 'USDT' ? 'USD₮' : 'cNGN';
-  const what = rate !== null || item.in.token === 'USDT'
-    ? `$${Number(item.in.token === 'USDT' ? item.in.amountUsd : Number(item.in.amountNgn) / (rate ?? 1)).toFixed(0)} to ${to}`
-    : `Swap to ${to}`;
+  const what = rate !== null && item.in.amountUsd != null
+    ? `$${Number(item.in.amountUsd).toFixed(0)} to ${to}`
+    : `${tokenUnits(item.in)} to ${to} · Rate unavailable`;
   async function approve() {
     setState('waiting'); setMsg(null);
     try { await sendApproveSwap(owner, vault, BigInt(item.id)); setState('ok'); setTimeout(onDone, 1500); }
     catch (e) { setState('error'); setMsg(friendly(e)); }
   }
+  async function reject() {
+    setState('rejecting'); setMsg(null);
+    try { await sendRejectSwap(owner, vault, BigInt(item.id)); setState('rejected'); setTimeout(onDone, 6000); }
+    catch (e) { setState('error'); setMsg(friendly(e)); }
+  }
+  const busy = state === 'waiting' || state === 'rejecting';
+  const final = state === 'ok' || state === 'rejected';
   return (
     <section className={`${s.c} ${s.ap}`} aria-label="Trade waiting for your approval">
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className={s.lbl}>Needs your OK · {what}</div>
         <div className={s.cd} aria-live="polite">{expired ? 'Expired' : formatCountdown(left)}</div>
         <div className={s.lbl} style={{ fontSize: 12 }}>
-          {state === 'ok' ? 'Approved ✓' : state === 'error' ? msg : rate === null ? 'Rate unavailable · Auto-cancels if you don\u2019t answer' : 'Auto-cancels if you don\u2019t answer'}
+          {state === 'ok' ? 'Approved ✓' : state === 'rejected' ? `You rejected this. ${REJECT_HELPER}` : state === 'error' ? msg : rate === null ? 'Rate unavailable · Auto-cancels if you don\u2019t answer' : 'Auto-cancels if you don\u2019t answer'}
         </div>
       </div>
       <div className={s.apBtns}>
-      <button type="button" className={s.pill} onClick={onReject} disabled={expired || state === 'waiting' || state === 'ok'}>Reject</button>
-      <button type="button" className={`${s.pill} ${s.yes}`} onClick={approve} disabled={expired || state === 'waiting' || state === 'ok'}>
+      {!final ? <button type="button" className={s.pill} onClick={reject} disabled={expired || busy}>{state === 'rejecting' ? 'Waiting…' : 'Reject'}</button> : null}
+      {!final ? <button type="button" className={`${s.pill} ${s.yes}`} onClick={approve} disabled={expired || busy}>
         {state === 'waiting' ? 'Waiting…' : 'Approve'}
-      </button>
+      </button> : null}
       </div>
     </section>
   );
@@ -99,16 +106,15 @@ export function Overview({ vault, owner, miniPay }: { vault: `0x${string}`; owne
   const [approvals, setApprovals] = useState<ApprovalItem[] | null>(null);
   const [agent, setAgent] = useState<AgentStatus | null>(null);
   const [limits, setLimits] = useState<ApiLimits | null>(null);
+  const [vaultCheck, setVaultCheck] = useState<{ at: string | null; ok: boolean | null }>({ at: null, ok: null });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [cur, setCur] = useState<Cur>('NGN');
   const [hidden, setHidden] = useState(false);
   const [sheet, setSheet] = useState<'deposit' | 'withdraw' | null>(null);
-  const [rejected, setRejected] = useState<string[]>([]);
 
   useEffect(() => {
     try { setHidden(localStorage.getItem('ng:hide') === '1'); } catch { /* ignore */ }
-    try { setRejected(JSON.parse(localStorage.getItem(dismissedKey(vault)) ?? '[]')); } catch { /* ignore */ }
   }, [vault]);
 
   async function load() {
@@ -121,6 +127,7 @@ export function Overview({ vault, owner, miniPay }: { vault: `0x${string}`; owne
       setApprovals(d.approvals);
       setAgent(d.agent);
       setLimits(d.limits);
+      setVaultCheck({ at: d.vaultCheckedAt, ok: d.vaultCheckOk });
       if (d.apiDown) setError('Agent status is unavailable right now. Balances are read from the chain.');
     } catch {
       setError('Could not load your vault. Try again.');
@@ -136,16 +143,11 @@ export function Overview({ vault, owner, miniPay }: { vault: `0x${string}`; owne
   function toggleHide() {
     setHidden((h) => { try { localStorage.setItem('ng:hide', h ? '0' : '1'); } catch { /* ignore */ } return !h; });
   }
-  function reject(id: string) {
-    const next = [...rejected, id];
-    setRejected(next);
-    try { localStorage.setItem(dismissedKey(vault), JSON.stringify(next)); } catch { /* ignore */ }
-  }
 
-  const status = agentLine(agent, balances?.lastCheckedAt);
+  const status = agentLine(agent, vaultCheck.at ?? balances?.lastCheckedAt, vaultCheck.ok);
   const live = useMemo(
-    () => (approvals ?? []).filter((a) => !rejected.includes(a.id) && msLeft(a.expiresAt) > 0).sort((a, b) => +new Date(a.expiresAt) - +new Date(b.expiresAt)),
-    [approvals, rejected],
+    () => (approvals ?? []).filter((a) => a.status !== 'rejected' && msLeft(a.expiresAt) > 0).sort((a, b) => +new Date(a.expiresAt) - +new Date(b.expiresAt)),
+    [approvals],
   );
   const pending = live.length;
 
@@ -215,7 +217,7 @@ export function Overview({ vault, owner, miniPay }: { vault: `0x${string}`; owne
                 <div className={s.sub}>
                   {balances && rate > 0 && !hidden
                     ? `≈ ${cur === 'NGN' ? splitAmount(totalUsd, 'USD').whole + splitAmount(totalUsd, 'USD').dec : splitAmount(totalNgn, 'NGN').whole} · `
-                    : balances && rate === 0 ? 'Waiting for the agent\u2019s first rate check · ' : ''}
+                    : balances && rate === 0 ? 'Rate unavailable · ' : ''}
                   {shorten(vault)}
                 </div>
                 {empty ? <p className={s.empty}>Your vault is empty. Deposit cNGN or USD₮ and the agent will start protecting it.</p> : null}
@@ -243,7 +245,7 @@ export function Overview({ vault, owner, miniPay }: { vault: `0x${string}`; owne
               <div className={s.sub}>What your vault is worth beyond plain cNGN</div>
               <div className={s.minis}>
                 <div className={s.mini}>Trades this month<b>{activity ? monthTrades : '—'}</b></div>
-                <div className={s.mini}>Naira rate today<b>{rate > 0 ? `₦${rate.toLocaleString('en-US', { maximumFractionDigits: 0 })} / $` : 'Unavailable'}</b></div>
+                <div className={s.mini}>Naira rate today<b>{rate > 0 ? `₦${rate.toLocaleString('en-US', { maximumFractionDigits: 0 })} / $` : 'Rate unavailable'}</b></div>
               </div>
             </section>
           ) : loading && !balances ? (
@@ -252,7 +254,7 @@ export function Overview({ vault, owner, miniPay }: { vault: `0x${string}`; owne
 
           {/* Approval banner (first pending, soonest expiry) */}
           {live[0] ? (
-            <ApprovalBanner key={live[0].id} item={live[0]} owner={owner} vault={vault} onDone={load} onReject={() => reject(live[0]!.id)} />
+            <ApprovalBanner key={live[0].id} item={live[0]} owner={owner} vault={vault} onDone={load} />
           ) : null}
 
           {/* Mix ring */}
@@ -319,13 +321,15 @@ export function Overview({ vault, owner, miniPay }: { vault: `0x${string}`; owne
             ) : (
               (activity ?? []).slice(0, 3).map((it) => {
                 const v = tradeView(it);
+                const unrated = noRate(it.in ?? it.out);
+                const rej = it.status === 'rejected';
                 return (
-                  <a key={it.id} className={s.tr} href={txUrl(it.txHash)} target="_blank" rel="noreferrer">
+                  <a key={it.id} className={s.tr} href={it.txHash ? txUrl(it.txHash) : undefined} target="_blank" rel="noreferrer">
                     <div className={`${s.ic} ${v.up ? s.icUp : s.icDn}`} aria-hidden>{v.icon}</div>
                     <div className={s.t}><b>{v.title}</b><span>{it.reason}</span></div>
-                    <div className={`${s.amt} ${v.up ? s.g : s.r}`}>
-                      {hidden ? '••' : `${v.atLeast ? '≥ ' : ''}${signedMoney(v.usd, 'USD')}`}
-                      <span>{it.status === 'confirmed' ? timeLabel(it.at) : it.status === 'pending' ? 'Pending' : 'Failed'}</span>
+                    <div className={`${s.amt} ${rej || unrated ? '' : v.up ? s.g : s.r}`}>
+                      {rej ? 'You rejected this' : unrated ? 'Rate unavailable' : hidden ? '••' : `${v.atLeast ? '≥ ' : ''}${signedMoney(v.usd, 'USD')}`}
+                      <span>{it.status === 'confirmed' || rej ? timeLabel(it.at) : it.status === 'pending' ? 'Pending' : 'Failed'}</span>
                     </div>
                   </a>
                 );
