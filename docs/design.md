@@ -33,7 +33,18 @@ flowchart LR
 | Celo Sepolia (testnet) | 11142220 | https://forno.celo-sepolia.celo-testnet.org |
 | Celo mainnet | 42220 | https://forno.celo.org |
 
-Token and Textile addresses go in `agent/src/config.ts` per network. **TBD**: confirm Textile contract addresses, swap interface, and testnet availability with Textile (office hours Thursdays 12:00 GMT). Until then, Task 1 uses a mock swap router.
+Token and Textile addresses go in `agent/src/config.ts` per network. **TBD**: confirm Textile contract addresses, swap interface, and testnet availability with Textile (office hours Thursdays 12:00 GMT). Until then, the vault uses a mock swap router on Sepolia.
+
+### Celo Sepolia deployments (PR #6)
+| | Address |
+|---|---|
+| Vault | `0xA47F3e8b08a94D1933e2031416d54640A0BEF63B` |
+| Mock cNGN | `0xfe37fbEA39ce656d7f8181e946E723b7b0D8cecB` |
+| Mock USDT | `0x65F5245b352EfE3ed15EdfE20efc8222107efC3c` |
+| Mock router | `0xa2859541D2d464e23ad0c07a944a96ad191E2eF2` |
+| Agent | `0xa2a173a481bc063fee0ef11c67fc756dc5f928f4` |
+
+Recorded in `deployments/celo-sepolia.json` and `agent/src/config.ts`. Before mainnet, transfer vault ownership from the deployer to the user's wallet.
 
 ## 1. Vault contract (`contracts/src/Vault.sol`)
 
@@ -89,7 +100,9 @@ Writes (approve, set limits, deposit, withdraw) are **signed by the user's walle
 ## 4. Data (Postgres)
 - `activity` (vault, kind, amounts, rate, reason, tx_hash, status, created_at)
 - `approvals` (vault, onchain_id, amounts, reason, expires_at, status)
-- `waitlist` (id, email, phone, wallet_address, wallet_verified bool, source, consent bool, created_at). `wallet_verified` is true only when the address came from MiniPay / a connected wallet. Only verified addresses count toward the independent-user check (active on Celo before 6 Oct). Never put signups in seeds or logs.
+- `waitlist` (id, email, phone, wallet_address, wallet_verified bool, source, consent bool, created_at).
+  - **source allowlist:** `x`, `celo-ng`, `celo-africa-dao`, `minipay`, `whatsapp-freelancers`, `referral`. Anything else, or missing, stores as `direct`.
+  - **wallet_verified:** the client must never send a verified flag. Store the address plus whether it came from MiniPay. Real verification is Task 5: the user signs a short message in MiniPay and the server recovers the signer; only then set `wallet_verified = true`. Only verified addresses count toward the independent-user check (active on Celo before 6 Oct). Never put signups in seeds or logs.
 
 ## 5. MiniPay
 - Connect via the injected provider; the wallet address is the identity. No separate login.
@@ -109,7 +122,7 @@ Source: [Celo ERC-8004 docs](https://docs.celo.org/build/agents/8004).
 2. **Tx builder.** `agent/src/txBuilder.ts` appends `ATTRIBUTION_TAG`. Done when a test proves every built tx carries it.
 3. **Strategy.** Pure `strategy.ts` with unit tests for drift, sizing, limits.
 4. **Agent loop on Celo Sepolia** with Postgres activity log. Done when it makes and logs trades against the Sepolia vault.
-5. **API** per section 3, with tests.
+5. **API** per section 3, with tests. Include waitlist POST: source allowlist → `direct`, and MiniPay signature verification before setting `wallet_verified`.
 6. **Dashboard wiring** to the API following `docs/ui-spec.md`, MiniPay connect.
 7. **Loss-example script**: compute the real ₦ loss on ₦500,000 over last month from rate data for the waitlist page.
 8. **Textile integration**: swap mock router for real Textile once addresses are confirmed.
