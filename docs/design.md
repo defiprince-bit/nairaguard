@@ -35,16 +35,16 @@ flowchart LR
 
 Token and Textile addresses go in `agent/src/config.ts` per network. **TBD**: confirm Textile contract addresses, swap interface, and testnet availability with Textile (office hours Thursdays 12:00 GMT). Until then, the vault uses a mock swap router on Sepolia.
 
-### Celo Sepolia deployments (PR #6)
+### Celo Sepolia deployments (PR #13, Ownable2Step)
 | | Address |
 |---|---|
-| Vault | `0xA47F3e8b08a94D1933e2031416d54640A0BEF63B` |
-| Mock cNGN | `0xfe37fbEA39ce656d7f8181e946E723b7b0D8cecB` |
-| Mock USDT | `0x65F5245b352EfE3ed15EdfE20efc8222107efC3c` |
-| Mock router | `0xa2859541D2d464e23ad0c07a944a96ad191E2eF2` |
+| Vault | `0xD436aA344C0E2a58a607443680651a2c32066be6` |
+| Mock cNGN | `0xaA3B7364E418deC4Fb147f1BD2d95A4022082aEA` |
+| Mock USDT | `0xe123971ec3F56138766272B7b15Ee188fdD0eFf7` |
+| Mock router | `0xd834aB4e7caDc62f2E27ab6755ED4B22F0461e86` |
 | Agent | `0xa2a173a481bc063fee0ef11c67fc756dc5f928f4` |
 
-Recorded in `deployments/celo-sepolia.json` and `agent/src/config.ts`. Before mainnet, transfer vault ownership from the deployer to the user's wallet.
+Recorded in `deployments/celo-sepolia.json` and `agent/src/config.ts`. The previous vault `0xA47F3e8b08a94D1933e2031416d54640A0BEF63B` is retired. Before mainnet, transfer vault ownership from the deployer to the user's wallet (`transferOwnership` + `acceptOwnership`).
 
 ## 1. Vault contract (`contracts/src/Vault.sol`)
 
