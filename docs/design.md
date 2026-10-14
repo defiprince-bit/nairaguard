@@ -38,15 +38,15 @@ Token and Textile addresses go in `agent/src/config.ts` per network. **TBD**: co
 ### Celo Sepolia deployments (Task 8a, VaultFactory)
 | | Address |
 |---|---|
-| VaultFactory | `0x4fa967c761eD1ddB642Fe62Fcb9aB7B924Df5310` (block 38714846) |
-| Vault implementation | `0x0C9c60D3ce78294A6845cC48F869bA0690E5D2aB` |
-| Test vault (deployer-owned) | `0x684C18e7938EC3D3b5945a76160732FDDFb23cA1` |
+| VaultFactory | `0x6C5b2087b321F2eb1cCC2BEA915503bAceD608E1` (block 38716408) |
+| Vault implementation | `0x4D3EA937aDD326aBef965918F7c6CeCD8D13567A` |
+| Test vault (deployer-owned, seeded) | `0x5cd6960f36E178852D75ACEC9Bf3796F0e21ac89` |
 | Mock cNGN | `0xaA3B7364E418deC4Fb147f1BD2d95A4022082aEA` |
 | Mock USDT | `0xe123971ec3F56138766272B7b15Ee188fdD0eFf7` |
 | Mock router | `0xd834aB4e7caDc62f2E27ab6755ED4B22F0461e86` |
 | Agent | `0xa2a173a481bc063fee0ef11c67fc756dc5f928f4` |
 
-Recorded in `deployments/celo-sepolia.json` and `agent/src/config.ts`. The single-owner vaults `0xD436aA344C0E2a58a607443680651a2c32066be6` and `0xA47F3e8b08a94D1933e2031416d54640A0BEF63B` are retired. Before mainnet, transfer factory ownership from the deployer to the user's wallet (`transferOwnership` + `acceptOwnership`).
+Recorded in `deployments/celo-sepolia.json` and `agent/src/config.ts`. Earlier factories `0x4fa967c761eD1ddB642Fe62Fcb9aB7B924Df5310` (pre balance-delta `Swapped`) and `0xD6401dAc34b1D8BB9a617407f6bB84DeF9B03dcd` (pre `reject`) and the single-owner vaults `0xD436aA344C0E2a58a607443680651a2c32066be6` and `0xA47F3e8b08a94D1933e2031416d54640A0BEF63B` are retired. Before mainnet, transfer factory ownership from the deployer to the user's wallet (`transferOwnership` + `acceptOwnership`).
 
 ## 1. Vault contract (`contracts/src/Vault.sol`)
 
@@ -113,7 +113,7 @@ Writes (approve, set limits, deposit, withdraw) are **signed by the user's walle
 
 ### Field contract (agreed 14 Oct)
 - Vault status: `lastCheckedAt` (ISO time of the agent's last check of **this** vault).
-- Activity: `amountOut` is the **actual** amount, measured as the vault's balance change and emitted in `Swapped(tokenIn, tokenOut, amountIn, amountOut)`. P&L and volume use it, never minimum-out.
+- Activity: `amountOut` is the **actual** amount, measured as the vault's balance change and emitted in `Swapped(id, tokenIn, tokenOut, amountIn, amountOut)` (`id` indexed; 0 for direct swaps). P&L and volume use it, never minimum-out.
 - Approvals: `rateNgnPerUsd` is `null` when there's no quote, and the UI shows "Rate unavailable". There's no fallback rate.
 - P&L: `pnlNgn`, `pnlUsd` and `pnlSince` are all `null` until there's a baseline (first funding).
 

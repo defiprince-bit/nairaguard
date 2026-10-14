@@ -238,6 +238,58 @@ contract VaultTest is Test {
         assertTrue(executed);
     }
 
+    function _propose() internal returns (uint256 id) {
+        _depositBoth(1_000e18);
+        uint256 amountIn = 60e18;
+        uint256 minOut = _minOut(address(cngn), address(usdt), amountIn);
+        vm.prank(agent);
+        id = vault.proposeSwap(address(cngn), address(usdt), amountIn, minOut, THRESHOLD);
+    }
+
+    event SwapRejected(uint256 indexed id);
+
+    function test_Reject_EmitsAndBlocksApprove() public {
+        uint256 id = _propose();
+        uint256 bal = cngn.balanceOf(address(vault));
+        vm.expectEmit(true, false, false, false, address(vault));
+        emit SwapRejected(id);
+        vault.reject(id);
+        assertTrue(vault.rejected(id));
+        vm.expectRevert(Vault.ApprovalRejected.selector);
+        vault.approve(id);
+        assertEq(cngn.balanceOf(address(vault)), bal);
+    }
+
+    function test_Reject_RevertTwice() public {
+        uint256 id = _propose();
+        vault.reject(id);
+        vm.expectRevert(Vault.ApprovalRejected.selector);
+        vault.reject(id);
+    }
+
+    function test_Reject_OnlyOwner() public {
+        uint256 id = _propose();
+        vm.prank(agent);
+        vm.expectRevert(Vault.NotOwner.selector);
+        vault.reject(id);
+    }
+
+    function test_Reject_RevertNotPending() public {
+        uint256 id = _propose();
+        vm.expectRevert(Vault.ApprovalNotFound.selector);
+        vault.reject(id + 1);
+        vault.approve(id);
+        vm.expectRevert(Vault.ApprovalAlreadyExecuted.selector);
+        vault.reject(id);
+    }
+
+    function test_Reject_RevertExpired() public {
+        uint256 id = _propose();
+        vm.warp(block.timestamp + 1 days + 1);
+        vm.expectRevert(Vault.ApprovalExpired.selector);
+        vault.reject(id);
+    }
+
     function test_Propose_RevertBelowThreshold() public {
         _depositBoth(1_000e18);
         uint256 amountIn = 10e18;

@@ -53,3 +53,15 @@ describe('vaultOf lookup', () => {
     expect(() => presetLimits('careful', 101)).toThrow();
   });
 });
+
+describe('risk presets', () => {
+  const e18 = (n: number) => parseUnits(String(n), 18);
+  it('match the agreed limits, Balanced by default', async () => {
+    const { DEFAULT_PRESET, PRESETS } = await import('./vault');
+    expect(DEFAULT_PRESET).toBe('balanced');
+    expect(PRESETS.careful.limits).toEqual({ maxTradeUsd: e18(20), maxDailyUsd: e18(50), approvalThresholdUsd: e18(5), maxSlippageBps: 50 });
+    expect(PRESETS.balanced.limits).toEqual({ maxTradeUsd: e18(50), maxDailyUsd: e18(150), approvalThresholdUsd: e18(25), maxSlippageBps: 100 });
+    expect(PRESETS.active.limits).toEqual({ maxTradeUsd: e18(200), maxDailyUsd: e18(500), approvalThresholdUsd: e18(100), maxSlippageBps: 100 });
+    expect(PRESETS.balanced.blurb).toContain('Asks you before any trade over $25.');
+  });
+});

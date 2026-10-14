@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { type Hex, type Log, decodeFunctionData, encodeAbiParameters, encodeEventTopics, parseUnits } from 'viem';
 import { fromDataSuffix } from '@celo/attribution-tags';
 import { ATTRIBUTION_TAG } from './config.js';
-import { type Db, migrate } from './db.js';
+import { type Db, markRejected, migrate } from './db.js';
 import { type ChainPort, runOnce, type VaultState } from './loop.js';
 import { FixedRateSource } from './textile.js';
 import type { TaggedTx } from './txBuilder.js';
@@ -53,6 +53,32 @@ beforeEach(async () => {
 const deps = (chain: ChainPort) => ({
   vault: VAULT, cngn: CNGN, usdt: USDT, chain, rates: new FixedRateSource(1500), db,
   now: () => new Date('2026-10-14T12:00:00Z'),
+});
+
+describe('actual amount out', () => {
+  it('records amountOut from the Swapped event, not minOut', async () => {
+    const swapped = {
+      address: VAULT,
+      topics: encodeEventTopics({ abi: vaultAbi, eventName: 'Swapped', args: { id: 0n } }),
+      data: encodeAbiParameters(
+        [{ type: 'address' }, { type: 'address' }, { type: 'uint256' }, { type: 'uint256' }],
+        [CNGN, USDT, e18(75_000), e18(49.97)]),
+    } as unknown as Log;
+    const chain = new FakeChain(state(), [swapped]);
+    await runOnce(deps(chain));
+    const { rows } = await db.query<{ amount_out: string; min_out: string }>('SELECT amount_out, min_out FROM activity');
+    expect(rows[0]!.amount_out).toBe(e18(49.97).toString());
+    expect(rows[0]!.amount_out).not.toBe(rows[0]!.min_out);
+  });
+
+  it('falls back to the tokenOut balance delta when no event is found', async () => {
+    let n = 0;
+    const chain = new FakeChain(state());
+    chain.readState = async () => (n++ === 0 ? state() : state({ ngnBalance: e18(225_000), usdBalance: e18(149.8) }));
+    await runOnce(deps(chain));
+    const { rows } = await db.query<{ amount_out: string }>('SELECT amount_out FROM activity');
+    expect(rows[0]!.amount_out).toBe(e18(49.8).toString());
+  });
 });
 
 describe('agent loop', () => {
@@ -124,5 +150,43 @@ describe('agent loop', () => {
     const again = await runOnce(deps(chain));
     expect(again.skipped).toMatch(/already waiting/);
     expect(chain.sent).toHaveLength(1);
+  });
+
+  it('cools down after a rejection unless drift moves meaningfully or the cooldown passes', async () => {
+    const topics = encodeEventTopics({ abi: vaultAbi, eventName: 'SwapProposed', args: { id: 9n } });
+    const log = { address: VAULT, topics, data: encodeAbiParameters([{ type: 'uint64' }], [1_800_000_000n]) } as unknown as Log;
+    const lim = { ...state().limits, approvalThresholdUsd: e18(10) };
+    const chain = new FakeChain(state({ limits: lim }), [log]);
+    let now = new Date('2026-10-14T12:00:00Z');
+    const dep = () => ({ ...deps(chain), now: () => now });
+    expect((await runOnce(dep())).decision.action).toBe('propose');
+    const share = await db.query<{ ngn_share_bps: number }>('SELECT ngn_share_bps FROM approvals');
+    expect(share.rows[0]!.ngn_share_bps).toBe(6667);
+    await markRejected(db, VAULT, '9', '0xrej', now);
+
+    // Same drift, 1h later: no re-propose.
+    now = new Date('2026-10-14T13:00:00Z');
+    const again = await runOnce(dep());
+    expect(again.skipped).toMatch(/declined this trade recently/);
+    expect(chain.sent).toHaveLength(1);
+
+    // Drift moved ≥5 pts (₦400k + $100 → 72.7% cNGN): asks again.
+    const moved = new FakeChain(state({ limits: lim, ngnBalance: e18(400_000) }), [log]);
+    const r2 = await runOnce({ ...deps(moved), now: () => now });
+    expect(r2.decision.action).toBe('propose');
+    expect(moved.sent).toHaveLength(1);
+  });
+
+  it('re-proposes the same trade once the cooldown has passed', async () => {
+    const topics = encodeEventTopics({ abi: vaultAbi, eventName: 'SwapProposed', args: { id: 11n } });
+    const log = { address: VAULT, topics, data: encodeAbiParameters([{ type: 'uint64' }], [1_800_000_000n]) } as unknown as Log;
+    const chain = new FakeChain(state({ limits: { ...state().limits, approvalThresholdUsd: e18(10) } }), [log]);
+    let now = new Date('2026-10-14T12:00:00Z');
+    await runOnce({ ...deps(chain), now: () => now, rejectCooldownMs: 3_600_000 });
+    await markRejected(db, VAULT, '11', '0xrej', now);
+    now = new Date('2026-10-14T13:00:01Z');
+    const r = await runOnce({ ...deps(chain), now: () => now, rejectCooldownMs: 3_600_000 });
+    expect(r.decision.action).toBe('propose');
+    expect(chain.sent).toHaveLength(2);
   });
 });

@@ -59,14 +59,91 @@ describe('P&L', () => {
   });
 });
 
+describe('Task 8a follow-ups', () => {
+  it('P&L is null (not 0.00) before a baseline exists', async () => {
+    await db.query(`INSERT INTO quotes (vault, rate, ngn_balance, usd_balance, value_ngn, hold_value_ngn, pnl_ngn)
+      VALUES ($1,'1500','0','0','0','0','0')`, [VAULT.toLowerCase()]);
+    live = state(0, 0);
+    const r = await api().handle({ method: 'GET', url: `/api/vault/${VAULT}/balances` });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ pnlNgn: null, pnlUsd: null, pnlSince: null, lastCheckedAt: null });
+  });
+
+  it('approvals with no quote return rate null and "rate unavailable", never rate 1', async () => {
+    await db.query(`INSERT INTO approvals (vault, onchain_id, token_in, token_out, amount_in, min_out, usd_value, reason, expires_at)
+      VALUES ($1,'7',$2,$3,$4,'1','1','big','2026-10-15T00:00:00Z')`, [VAULT, CNGN, USDT, e18(90_000).toString()]);
+    const item = ((await api().handle({ method: 'GET', url: `/api/vault/${VAULT}/approvals` })).body as any).items[0];
+    expect(item.rateNgnPerUsd).toBeNull();
+    expect(item).not.toHaveProperty('rate');
+    expect(item.rateNote).toBe('rate unavailable');
+    expect(item.in).toMatchObject({ token: 'cNGN', amountNgn: null, amountUsd: null, rate: null });
+  });
+
+  it('volume uses actual amounts, and lastCheckedAt is per vault', async () => {
+    const other = '0x00000000000000000000000000000000000000aa';
+    await logQuote(db, VAULT, e18(300_000), e18(100), 1500, clock);
+    await db.query(`INSERT INTO activity (vault, kind, token_in, token_out, amount_in, min_out, amount_out, reason, status)
+      VALUES ($1,'swap',$2,$3,$4,$5,$6,'r','confirmed'), ($1,'swap',$3,$2,$7,'1',$8,'r','confirmed')`,
+      [VAULT, CNGN, USDT, e18(75_000).toString(), e18(40).toString(), e18(49.9).toString(), e18(10).toString(), e18(14_900).toString()]);
+    await db.query(`INSERT INTO agent_runs (vault, ok, ran_at) VALUES ($1,true,'2026-10-14T11:55:00Z'), ($2,true,'2026-10-14T11:59:00Z')`,
+      [VAULT.toLowerCase(), other]);
+    const b = (await api().handle({ method: 'GET', url: `/api/vault/${VAULT}/balances` })).body as any;
+    expect(b.volumeUsd).toBe('59.90'); // 49.9 received + 10 sent, not minOut 40
+    expect(b.lastCheckedAt).toBe('2026-10-14T11:55:00.000Z');
+    const st = (await api().handle({ method: 'GET', url: `/api/vault/${VAULT}/status` })).body as any;
+    expect(st).toMatchObject({ lastCheckedAt: '2026-10-14T11:55:00.000Z', ok: true });
+  });
+});
+
+describe('reject + paging', () => {
+  it('approvals and activity report status "rejected"', async () => {
+    await db.query(`INSERT INTO approvals (vault, onchain_id, token_in, token_out, amount_in, min_out, usd_value, reason, tx_hash, expires_at)
+      VALUES ($1,'5',$2,$3,'1','1','1','big','0xp5','2026-10-15T00:00:00Z')`, [VAULT, CNGN, USDT]);
+    await db.query(`INSERT INTO activity (vault, kind, token_in, token_out, amount_in, min_out, rate, reason, tx_hash, status)
+      VALUES ($1,'propose',$2,$3,'1','1','1500','big','0xp5','confirmed')`, [VAULT, CNGN, USDT]);
+    const { markRejected } = await import('./db.js');
+    await markRejected(db, VAULT, '5', '0xr5', clock);
+    const ap = ((await api().handle({ method: 'GET', url: `/api/vault/${VAULT}/approvals` })).body as any).items;
+    expect(ap[0]).toMatchObject({ id: '5', status: 'rejected', rejectedAt: clock.toISOString() });
+    const act = ((await api().handle({ method: 'GET', url: `/api/vault/${VAULT}/activity` })).body as any).items;
+    expect(act[0]).toMatchObject({ kind: 'swap', status: 'rejected', txHash: '0xp5' });
+  });
+
+  it('pages /activity by (createdAt, id) with nextCursor null on the last page', async () => {
+    // 5 rows; two share a created_at to exercise the id tiebreak.
+    const ts = ['2026-10-14T10:00:00Z', '2026-10-14T11:00:00Z', '2026-10-14T11:00:00Z', '2026-10-14T11:30:00.123456Z', '2026-10-14T12:00:00Z'];
+    for (const t of ts) {
+      await db.query(`INSERT INTO activity (vault, kind, reason, status, created_at) VALUES ($1,'swap','r','confirmed',$2)`, [VAULT, t]);
+    }
+    await db.query(`INSERT INTO activity (vault, kind, reason, status) VALUES ($1,'noop','skip','skipped')`, [VAULT]);
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    let pages = 0;
+    do {
+      const url = `/api/vault/${VAULT}/activity?limit=2${cursor ? `&cursor=${cursor}` : ''}`;
+      const body = (await api().handle({ method: 'GET', url })).body as { items: { id: string }[]; nextCursor: string | null };
+      seen.push(...body.items.map((i) => i.id));
+      cursor = body.nextCursor;
+      pages++;
+    } while (cursor && pages < 10);
+    expect(pages).toBe(3);
+    expect(cursor).toBeNull();
+    expect(seen).toEqual(['5', '4', '3', '2', '1']);
+    const bad = await api().handle({ method: 'GET', url: `/api/vault/${VAULT}/activity?cursor=nope` });
+    expect(bad.status).toBe(400);
+  });
+});
+
 describe('read endpoints', () => {
   it('limits, activity, approvals, agent', async () => {
     const a = api();
     expect((await a.handle({ method: 'GET', url: `/api/vault/${VAULT}/limits` })).body).toMatchObject({ targetNgnBps: 5000, maxSlippageBps: 100 });
-    await db.query(`INSERT INTO activity (vault, kind, token_in, token_out, amount_in, min_out, rate, reason, tx_hash, status)
-      VALUES ($1,'swap',$2,$3,$4,$5,'1500','rebalance','0xab','confirmed')`, [VAULT, CNGN, USDT, e18(75_000).toString(), e18(49.5).toString()]);
+    await db.query(`INSERT INTO activity (vault, kind, token_in, token_out, amount_in, min_out, amount_out, rate, reason, tx_hash, status)
+      VALUES ($1,'swap',$2,$3,$4,$5,$6,'1500','rebalance','0xab','confirmed')`,
+      [VAULT, CNGN, USDT, e18(75_000).toString(), e18(49.5).toString(), e18(49.9).toString()]);
     const act = (await a.handle({ method: 'GET', url: `/api/vault/${VAULT}/activity` })).body as { items: any[] };
-    expect(act.items[0]).toMatchObject({ kind: 'swap', in: { token: 'cNGN', amountUsd: '50.00' }, out: { token: 'USDT' } });
+    // `out` is the actual amount received (49.9), not minOut (49.5).
+    expect(act.items[0]).toMatchObject({ kind: 'swap', in: { token: 'cNGN', amountUsd: '50.00' }, out: { token: 'USDT', amountUsd: '49.90' }, amountOut: e18(49.9).toString() });
     await db.query(`INSERT INTO approvals (vault, onchain_id, token_in, token_out, amount_in, min_out, usd_value, reason, expires_at)
       VALUES ($1,'1',$2,$3,'1','1','1','big','2026-10-15T00:00:00Z')`, [VAULT, CNGN, USDT]);
     expect(((await a.handle({ method: 'GET', url: `/api/vault/${v}/approvals` })).body as any).items).toHaveLength(1);

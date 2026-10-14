@@ -10,6 +10,8 @@ export const vaultAbi = parseAbi([
   'function dayStart() view returns (uint256)',
   'function paused() view returns (bool)',
   'event SwapProposed(uint256 indexed id, uint64 expiresAt)',
+  'event SwapRejected(uint256 indexed id)',
+  'function reject(uint256 id)',
   'event Swapped(uint256 indexed id, address tokenIn, address tokenOut, uint256 amountIn, uint256 amountOut)',
 ]);
 
