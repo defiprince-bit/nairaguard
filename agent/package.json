@@ -17,7 +17,8 @@
     "test:watch": "vitest",
     "count:independent": "tsx scripts/count-independent.ts",
     "register:erc8004": "tsx scripts/register-erc8004.ts",
-    "deploy:tagged": "tsx scripts/deploy-mainnet.ts"
+    "deploy:tagged": "tsx scripts/deploy-mainnet.ts",
+    "verify:deploy": "tsx scripts/verify-mainnet.ts"
   },
   "dependencies": {
     "@celo/attribution-tags": "^0.5.0",

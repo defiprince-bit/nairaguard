@@ -1,3 +1,4 @@
+import { getBaseline } from './pnl.js';
 import { PGlite } from '@electric-sql/pglite';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createPublicClient, custom, parseUnits } from 'viem';
@@ -25,6 +26,7 @@ const state = (ngn: number, usd: number): VaultState => ({
 });
 let live = state(300_000, 100);
 const api = () => createApi({
+  chainId: 11142220, // fixtures are Sepolia rows (column default)
   db, agentAddress: '0xA2A173A481BC063fEE0EF11c67Fc756DC5f928f4', tokens: { cngn: CNGN, usdt: USDT },
   readState: async () => live, siwe: { domain: DOMAIN, uri: `https://${DOMAIN}`, chainId: 42220, client: client as never },
   now: () => clock,
@@ -341,22 +343,39 @@ describe('Task 8b API', () => {
   });
 
   it('/api/quotes/stats counts every RFQ requested, quoted and filled, with the feed gap', async () => {
-    const ins = (quoted: boolean, outcome: string, size: number, rate: number | null, at: string) =>
+    const ins = (quoted: boolean, outcome: string, size: number, rate: number | null, at: string, chain = 42220) =>
       db.query(`INSERT INTO textile_quotes (vault, side, token_in, token_out, sell_amount, size_usd, quoted, rate_ngn_per_usd,
-        feed_rate_ngn_per_usd, outcome, requested_at) VALUES ($1,'ngnToUsd',$2,$3,'1',$4,$5,$6,1330,$7,$8)`,
-        [v, CNGN, USDT, size, quoted, rate, outcome, at]);
+        feed_rate_ngn_per_usd, outcome, requested_at, chain_id) VALUES ($1,'ngnToUsd',$2,$3,'1',$4,$5,$6,1330,$7,$8,$9)`,
+        [v, CNGN, USDT, size, quoted, rate, outcome, at, chain]);
     await ins(true, 'filled', 50, 1361, '2026-10-14T10:00:00Z');
     await ins(true, 'price_moved', 30, 1340, '2026-10-14T10:05:00Z');
     await ins(false, 'no_quote', 20, null, '2026-10-14T10:10:00Z');
     await ins(true, 'expired', 10, 1361, '2026-10-07T10:00:00Z');
+    await ins(true, 'filled', 999, 1361, '2026-10-14T10:20:00Z', 11142220); // Sepolia: never in the default
     const r = (await api().handle({ method: 'GET', url: '/api/quotes/stats' })).body as any;
-    expect(r).toMatchObject({ requested: 4, quoted: 3, filled: 1, requestedUsd: '110.00', quotedUsd: '90.00', filledUsd: '50.00' });
+    expect(r).toMatchObject({ chainId: 42220, requested: 4, quoted: 3, filled: 1, requestedUsd: '110.00', quotedUsd: '90.00', filledUsd: '50.00' });
     expect(r.outcomes).toEqual({ filled: 1, expired: 1, declined: 0, no_quote: 1, price_moved: 1 });
     expect(r.avgGapBps).toBeGreaterThan(150);
     expect(r.weekly).toHaveLength(2);
     const since = (await api().handle({ method: 'GET', url: '/api/quotes/stats?since=2026-10-13T00:00:00Z' })).body as any;
     expect(since.requested).toBe(3);
     expect((await api().handle({ method: 'GET', url: '/api/quotes/stats?since=nope' })).status).toBe(400);
+    const sep = (await api().handle({ method: 'GET', url: '/api/quotes/stats?chainId=11142220' })).body as any;
+    expect(sep).toMatchObject({ chainId: 11142220, requested: 1, filledUsd: '999.00' });
+    expect((await api().handle({ method: 'GET', url: '/api/quotes/stats?chainId=abc' })).status).toBe(400);
+  });
+
+  it('stats and P&L default to mainnet 42220 when no chainId is given (never all chains, never the agent chain)', async () => {
+    const noChain = createApi({ db, agentAddress: v as `0x${string}`, tokens: { cngn: CNGN, usdt: USDT },
+      siwe: { domain: 'x', uri: 'https://x', chainId: 42220, client: {} as never } });
+    await db.query(`INSERT INTO textile_quotes (vault, side, token_in, token_out, sell_amount, size_usd, quoted, outcome, chain_id)
+      VALUES ($1,'ngnToUsd',$2,$3,'1',5,true,'filled',11142220)`, [v, CNGN, USDT]);
+    const r = (await noChain.handle({ method: 'GET', url: '/api/quotes/stats' })).body as any;
+    expect(r).toMatchObject({ chainId: 42220, requested: 0 });
+    await db.query(`INSERT INTO vault_baseline (vault, ngn_start, usd_start, rate_start, funded_at, chain_id)
+      VALUES ($1,'1','1','1',now(),11142220) ON CONFLICT (vault) DO NOTHING`, [v.toLowerCase()]);
+    expect(await getBaseline(db, v)).toBeUndefined();
+    expect(await getBaseline(db, v, 11142220)).toBeDefined();
   });
 });
 

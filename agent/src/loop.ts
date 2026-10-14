@@ -80,10 +80,10 @@ export async function runOnce(d: LoopDeps): Promise<RunResult> {
       d.chain.readState(), d.rates.getRateNgnPerUsd(), d.chain.readFeed().catch(() => undefined),
     ]);
     const dec: Decimals = { ngn: s.ngnDecimals, usd: s.usdDecimals };
-    await logQuote(d.db, d.vault, s.ngnBalance, s.usdBalance, rate, now, dec);
+    await logQuote(d.db, d.vault, s.ngnBalance, s.usdBalance, rate, now, dec, d.chainId);
 
     const skip = async (why: string, decision?: StrategyDecision): Promise<RunResult> => {
-      await insertActivity(d.db, { vault: d.vault, kind: 'noop', reason: why, rate: String(rate), status: 'skipped' });
+      await insertActivity(d.db, { chainId: d.chainId, vault: d.vault, kind: 'noop', reason: why, rate: String(rate), status: 'skipped' });
       await recordRun(d.db, d.vault, true);
       return { decision, skipped: why };
     };
@@ -150,7 +150,7 @@ export async function runOnce(d: LoopDeps): Promise<RunResult> {
     });
     const r = await d.chain.send(tx);
     const status = r.status === 'success' ? 'confirmed' : 'failed';
-    await insertActivity(d.db, {
+    await insertActivity(d.db, { chainId: d.chainId,
       vault: d.vault, kind: 'propose', tokenIn, tokenOut, amountIn: amountIn.toString(), minOut: minOut.toString(),
       usdValue: usdValue.toString(), rate: String(rate), reason: decision.reason, txHash: r.hash, status,
     });
@@ -159,7 +159,7 @@ export async function runOnce(d: LoopDeps): Promise<RunResult> {
         try {
           const ev = decodeEventLog({ abi: vaultAbi, data: log.data, topics: log.topics });
           if (ev.eventName === 'SwapProposed') {
-            await insertApproval(d.db, {
+            await insertApproval(d.db, { chainId: d.chainId,
               vault: d.vault, onchainId: ev.args.id.toString(), tokenIn, tokenOut, amountIn: amountIn.toString(),
               minOut: minOut.toString(), usdValue: usdValue.toString(), reason: decision.reason, txHash: r.hash,
               expiresAt: new Date(Number(ev.args.expiresAt) * 1000), ngnShareBps,
@@ -201,7 +201,7 @@ async function rfqSwap(
     approvalId: q.approvalId ? q.approvalId.toString() : undefined, requestedAt: now,
   } as const;
   const note = async (why: string, outcome: RfqOutcome): Promise<RunResult> => {
-    await insertActivity(d.db, { vault: d.vault, kind: 'noop', reason: why, rate: String(rate), status: 'skipped' });
+    await insertActivity(d.db, { chainId: d.chainId, vault: d.vault, kind: 'noop', reason: why, rate: String(rate), status: 'skipped' });
     return { skipped: why, outcome };
   };
 
@@ -209,7 +209,7 @@ async function rfqSwap(
     chainId: d.chainId, sellToken: q.tokenIn, buyToken: q.tokenOut, sellAmount: q.amountIn, taker: d.vault,
   });
   if (!quote.quoted) {
-    await insertRfqQuote(d.db, { ...base, quoted: false, outcome: 'no_quote', outcomeReason: quote.reason });
+    await insertRfqQuote(d.db, { chainId: d.chainId, ...base, quoted: false, outcome: 'no_quote', outcomeReason: quote.reason });
     return note(NO_OFFER, 'no_quote');
   }
 
@@ -221,7 +221,7 @@ async function rfqSwap(
     rate: qRate, expiresAt: quote.expiresAt,
   };
   const decline = async (outcome: RfqOutcome, why: string, activity: string) => {
-    await insertRfqQuote(d.db, { ...quoted, outcome, outcomeReason: why });
+    await insertRfqQuote(d.db, { chainId: d.chainId, ...quoted, outcome, outcomeReason: why });
     return note(activity, outcome);
   };
 
@@ -245,8 +245,8 @@ async function rfqSwap(
   });
   const r = await d.chain.send(tx);
   if (r.status !== 'success') {
-    await insertRfqQuote(d.db, { ...quoted, outcome: 'expired', outcomeReason: 'tx_reverted', txHash: r.hash });
-    await insertActivity(d.db, {
+    await insertRfqQuote(d.db, { chainId: d.chainId, ...quoted, outcome: 'expired', outcomeReason: 'tx_reverted', txHash: r.hash });
+    await insertActivity(d.db, { chainId: d.chainId,
       vault: d.vault, kind: 'swap', tokenIn: q.tokenIn, tokenOut: q.tokenOut, amountIn: quote.takerPays.toString(),
       minOut: quote.buyAmount.toString(), rate: String(qRate), reason: q.reason, txHash: r.hash, status: 'failed',
     });
@@ -263,8 +263,8 @@ async function rfqSwap(
   // venue comes from the target the vault actually called, labelled by the factory. Never from the quote/agent.
   const venue = ev?.target ? await d.chain.venueLabel(ev.target).catch(() => '') : '';
   const usdValue = toUnits(ngnToUsd ? toNum(amountOut ?? quote.buyAmount, dOut) : inN, USD_DEC);
-  await insertRfqQuote(d.db, { ...quoted, outcome: 'filled', txHash: r.hash, amountOut: amountOut?.toString() });
-  await insertActivity(d.db, {
+  await insertRfqQuote(d.db, { chainId: d.chainId, ...quoted, outcome: 'filled', txHash: r.hash, amountOut: amountOut?.toString() });
+  await insertActivity(d.db, { chainId: d.chainId,
     vault: d.vault, kind: 'swap', tokenIn: q.tokenIn, tokenOut: q.tokenOut, amountIn: quote.takerPays.toString(),
     minOut: quote.buyAmount.toString(), amountOut: amountOut?.toString(), usdValue: usdValue.toString(),
     rate: String(qRate), reason: q.reason, txHash: r.hash, status: 'confirmed',
@@ -274,7 +274,7 @@ async function rfqSwap(
 
   // Per-swap P&L: value change across the swap at the same rate (fees + slippage).
   const fee = valueNgn(after.ngnBalance, after.usdBalance, rate, dec) - valueNgn(s.ngnBalance, s.usdBalance, rate, dec);
-  const p = await logQuote(d.db, d.vault, after.ngnBalance, after.usdBalance, rate, now, dec);
+  const p = await logQuote(d.db, d.vault, after.ngnBalance, after.usdBalance, rate, now, dec, d.chainId);
   await d.db.query(
     `UPDATE activity SET fee_ngn=$1, pnl_ngn=$2 WHERE id=(SELECT max(id) FROM activity WHERE vault=$3 AND tx_hash=$4)`,
     [String(fee), String(p.pnlNgn), d.vault, r.hash]);

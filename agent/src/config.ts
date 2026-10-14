@@ -46,3 +46,8 @@ export const WAITLIST_RPC_URL =
 
 /** Mock market rate (₦ per $1) for Sepolia quotes; the mock feed holds the official rate (~₦1,330). */
 export const MOCK_MARKET_RATE = Number(process.env.MOCK_MARKET_RATE ?? 1361);
+
+/** Chain this agent instance trades on. Every stats/count row is tagged with it (migration 011). */
+export const AGENT_CHAIN_ID = NETWORK === 'celo' ? 42220 : 11142220;
+/** Default chain for stats, user counts and P&L when the caller passes none: always mainnet, never all chains. */
+export const STATS_DEFAULT_CHAIN_ID = 42220;

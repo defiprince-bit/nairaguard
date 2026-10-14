@@ -68,6 +68,7 @@ async function main(): Promise<void> {
   });
   const api = createApi({
     db,
+    chainId: addrs.chainId, // per-vault views (balances, P&L) read this agent's rows; stats default to 42220
     agentAddress: port.address,
     erc8004Id: process.env.ERC8004_ID,
     tokens: { cngn: addrs.cngn, usdt: addrs.usdt },
