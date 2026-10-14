@@ -68,7 +68,7 @@ All commands run from `agent/`. Every transaction carries the attribution tag `c
    → `owner()` is the owner's wallet and `pendingOwner()` is zero.
 6. **Register ERC-8004 (tagged)**: `pnpm register:erc8004` from the agent wallet on mainnet; set `ERC8004_ID` on `agent-mainnet`.
 7. **Fund the agent wallet** with CELO for gas (target: by 28 Oct).
-8. **Set `TEXTILE_API_KEY`** on `agent-mainnet` and start/redeploy the service; check `/healthz` and `/api/status`.
+8. **Set `TEXTILE_API_KEY`** on `agent-mainnet` and start/redeploy the service; check `/healthz` and `/api/vault/<vault>/status`.
 9. **First $1 trade**: owner creates a vault in MiniPay on the mainnet factory, deposits a small amount, and the agent's
    first fill (~$1) goes through Textile. Confirm the tx carries the tag and shows in `/api/quotes/stats` (chain 42220).
 
