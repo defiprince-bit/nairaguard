@@ -34,6 +34,10 @@ contract VaultFactory {
     /// @notice Allowlisted (target, spender) venue pairs for `Vault.swapViaRfq`, keyed on
     ///         keccak256(abi.encode(target, spender)). New venues (e.g. a DEX) need no vault redeploy.
     mapping(bytes32 pairKey => bool) public isVenuePair;
+    /// @notice Label per pair, e.g. "textile".
+    mapping(bytes32 pairKey => string) public venuePairLabel;
+    /// @notice Label of the most recently allowlisted pair for a target. The API maps `Swapped.target` → venue with it.
+    mapping(address target => string) public venueLabelOf;
 
     uint16 public constant MAX_DEVIATION_CAP_BPS = 1_000; // 10%
     /// @notice How long the agent has to execute an approved proposal.
@@ -50,7 +54,7 @@ contract VaultFactory {
     event VaultCreated(address indexed owner, address indexed vault);
     event AgentUpdated(address indexed agent);
     event RouterUpdated(address indexed router, bool allowed);
-    event VenueUpdated(address indexed target, address indexed spender, bool allowed);
+    event VenueUpdated(address indexed target, address indexed spender, bool allowed, string label);
     event PriceFeedUpdated(address indexed feed);
     event OracleParamsUpdated(uint16 maxDeviationBps, uint32 maxFeedAge);
     event FallbackRateUpdated(bool enabled, uint256 rate, uint8 decimals, uint32 maxAge);
@@ -117,10 +121,14 @@ contract VaultFactory {
     }
 
     /// @notice Allowlist (or remove) a (target, spender) pair, e.g. (reactor, reactor). Never add Permit2.
-    function setVenue(address target, address spender, bool allowed) external onlyOwner {
+    function setVenue(address target, address spender, bool allowed, string calldata label) external onlyOwner {
         if (target == address(0) || spender == address(0)) revert ZeroAddress();
-        isVenuePair[venueKey(target, spender)] = allowed;
-        emit VenueUpdated(target, spender, allowed);
+        if (allowed && bytes(label).length == 0) revert InvalidParam();
+        bytes32 key = venueKey(target, spender);
+        isVenuePair[key] = allowed;
+        venuePairLabel[key] = label;
+        if (allowed) venueLabelOf[target] = label;
+        emit VenueUpdated(target, spender, allowed, label);
     }
 
     /// @notice Chainlink NGN/USD feed (Celo mainnet: 0xc17cbe2db40e53f4984c46f608da6da1ff074c11).

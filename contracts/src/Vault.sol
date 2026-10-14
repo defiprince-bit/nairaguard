@@ -127,7 +127,10 @@ contract Vault {
 
     event Deposited(address indexed token, uint256 amount, address indexed from);
     event Withdrawn(address indexed token, uint256 amount, address indexed to);
-    event Swapped(uint256 indexed id, address tokenIn, address tokenOut, uint256 amountIn, uint256 amountOut);
+    /// @dev `target` is the contract actually called (venue reactor, or the legacy router).
+    event Swapped(
+        uint256 indexed id, address tokenIn, address tokenOut, uint256 amountIn, uint256 amountOut, address target
+    );
     event SwapProposed(uint256 indexed id, uint64 expiresAt);
     event SwapRejected(uint256 indexed id);
     event SwapApproved(uint256 indexed id, uint256 approvedMinOut, uint64 expiresAt);
@@ -356,7 +359,7 @@ contract Vault {
         if (supported[target] || target == address(this)) revert NotAllowlisted();
         _checkTextileTrade(tokenIn, tokenOut, amountIn, minOut, approvalId);
         amountOut = _callReactor(tokenIn, tokenOut, amountIn, minOut, target, spender, data);
-        emit Swapped(approvalId, tokenIn, tokenOut, amountIn, amountOut);
+        emit Swapped(approvalId, tokenIn, tokenOut, amountIn, amountOut, target);
     }
 
     /// @notice Reference USD-per-NGN price and its decimals: the Chainlink feed, or the owner-set fallback
@@ -588,7 +591,7 @@ contract Vault {
         amountOut = IERC20(tokenOut).balanceOf(address(this)) - balBefore;
         if (amountOut < minOut) revert SlippageTooHigh();
 
-        emit Swapped(id, tokenIn, tokenOut, amountIn, amountOut);
+        emit Swapped(id, tokenIn, tokenOut, amountIn, amountOut, router);
     }
 
     function _pull(address token, address from, uint256 amount) internal {

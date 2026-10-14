@@ -32,7 +32,9 @@ contract VaultFactoryTest is Test {
     address stranger = address(0xBAD);
 
     event VaultCreated(address indexed owner, address indexed vault);
-    event Swapped(uint256 indexed id, address tokenIn, address tokenOut, uint256 amountIn, uint256 amountOut);
+    event Swapped(
+        uint256 indexed id, address tokenIn, address tokenOut, uint256 amountIn, uint256 amountOut, address target
+    );
 
     function setUp() public {
         cngn = new MockERC20("cNGN", "cNGN", 18);
@@ -163,7 +165,7 @@ contract VaultFactoryTest is Test {
         _fund(v, alice, 1_000e18);
         uint256 before = usdt.balanceOf(address(v));
         vm.expectEmit(true, false, false, true, address(v));
-        emit Swapped(0, address(cngn), address(usdt), 10e18, 10e18);
+        emit Swapped(0, address(cngn), address(usdt), 10e18, 10e18, address(router));
         vm.prank(agent);
         uint256 out = v.swap(address(cngn), address(usdt), 10e18, 9.9e18, 10e18);
         assertEq(out, usdt.balanceOf(address(v)) - before);

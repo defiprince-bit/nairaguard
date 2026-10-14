@@ -70,7 +70,7 @@ contract RfqSwapTest is Test {
 
         factory = new VaultFactory(address(new VaultHarness()), agent, address(cngn), address(usdt));
         factory.setPriceFeed(address(feed));
-        factory.setVenue(address(reactor), address(reactor), true);
+        factory.setVenue(address(reactor), address(reactor), true, "textile");
         vault = VaultHarness(factory.createVault(_limits()));
 
         cngn.mint(owner, 10_000_000e6);
@@ -140,7 +140,7 @@ contract RfqSwapTest is Test {
     }
 
     function test_RevertTargetNotAllowlisted() public {
-        factory.setVenue(address(reactor), address(reactor), false);
+        factory.setVenue(address(reactor), address(reactor), false, "textile");
         vm.expectRevert(Vault.NotAllowlisted.selector);
         _sellNgn(10e6, 0);
     }
@@ -148,7 +148,7 @@ contract RfqSwapTest is Test {
     function test_RevertMismatchedVenuePair() public {
         // Both contracts are individually allowlisted, but (reactor, executor) is not an allowlisted pair.
         MockTextileReactor executor = new MockTextileReactor();
-        factory.setVenue(address(executor), address(executor), true);
+        factory.setVenue(address(executor), address(executor), true, "textile");
         bytes memory d = _data(address(cngn), address(usdt), 13_615e6, 10_003_674, address(vault));
         vm.prank(agent);
         vm.expectRevert(Vault.NotAllowlisted.selector);
@@ -158,7 +158,7 @@ contract RfqSwapTest is Test {
         vault.swapViaRfq(address(cngn), address(usdt), 13_615e6, 10e6, address(executor), address(reactor), d, 0);
     }
 
-    event VenueUpdated(address indexed target, address indexed spender, bool allowed);
+    event VenueUpdated(address indexed target, address indexed spender, bool allowed, string label);
 
     function test_SetVenue_OwnerOnly_EmitsAndAddsVenueWithoutRedeploy() public {
         MockTextileReactor dex = new MockTextileReactor();
@@ -166,18 +166,22 @@ contract RfqSwapTest is Test {
         usdt.mint(address(dex), 1e12);
         vm.prank(agent);
         vm.expectRevert(VaultFactory.NotOwner.selector);
-        factory.setVenue(address(dex), address(dex), true);
+        factory.setVenue(address(dex), address(dex), true, "dex");
         vm.expectEmit(true, true, false, true, address(factory));
-        emit VenueUpdated(address(dex), address(dex), true);
-        factory.setVenue(address(dex), address(dex), true);
+        emit VenueUpdated(address(dex), address(dex), true, "dex");
+        factory.setVenue(address(dex), address(dex), true, "dex");
         assertTrue(factory.isAllowedVenue(address(dex), address(dex)));
+        assertEq(factory.venueLabelOf(address(dex)), "dex");
+        assertEq(factory.venueLabelOf(address(reactor)), "textile");
         bytes memory d = _data(address(cngn), address(usdt), 13_615e6, 10_003_674, address(vault));
+        vm.expectEmit(true, false, false, true, address(vault));
+        emit Swapped(0, address(cngn), address(usdt), 13_615e6, 10_003_674, address(dex));
         vm.prank(agent);
         vault.swapViaRfq(address(cngn), address(usdt), 13_615e6, 10e6, address(dex), address(dex), d, 0);
     }
 
     function test_RevertTargetIsSupportedToken() public {
-        factory.setVenue(address(usdt), address(reactor), true);
+        factory.setVenue(address(usdt), address(reactor), true, "textile");
         bytes memory d = abi.encodeCall(MockERC20.transfer, (stranger, 1e6));
         vm.prank(agent);
         vm.expectRevert(Vault.NotAllowlisted.selector);
@@ -203,7 +207,7 @@ contract RfqSwapTest is Test {
 
     function test_ApprovalZeroAfterRevert() public {
         RevertingReactor bad = new RevertingReactor();
-        factory.setVenue(address(bad), address(bad), true);
+        factory.setVenue(address(bad), address(bad), true, "textile");
         bytes memory d = abi.encodeCall(
             RevertingReactor.fill, (_order(address(cngn), address(usdt), 13_615e6, 10e6, address(vault)))
         );
@@ -220,7 +224,7 @@ contract RfqSwapTest is Test {
 
     function test_RevertRecipientDiversion() public {
         DivertingReactor dv = new DivertingReactor();
-        factory.setVenue(address(dv), address(dv), true);
+        factory.setVenue(address(dv), address(dv), true, "textile");
         usdt.mint(address(dv), 1e12);
         bytes memory d = abi.encodeCall(
             DivertingReactor.fill,
@@ -243,7 +247,7 @@ contract RfqSwapTest is Test {
     function test_RevertOtherSupportedBalanceChanges() public {
         vault.addSupportedForTest(address(extra));
         SideEffectReactor fx = new SideEffectReactor();
-        factory.setVenue(address(fx), address(fx), true);
+        factory.setVenue(address(fx), address(fx), true, "textile");
         cngn.mint(address(fx), 1e12);
         usdt.mint(address(fx), 1e12);
         extra.mint(address(fx), 1e18);
@@ -256,13 +260,15 @@ contract RfqSwapTest is Test {
         vault.swapViaRfq(address(cngn), address(usdt), 13_615e6, 10e6, address(fx), address(fx), d, 0);
     }
 
-    event Swapped(uint256 indexed id, address tokenIn, address tokenOut, uint256 amountIn, uint256 amountOut);
+    event Swapped(
+        uint256 indexed id, address tokenIn, address tokenOut, uint256 amountIn, uint256 amountOut, address target
+    );
 
     function test_AmountOutEqualsBalanceChange() public {
         uint256 before = usdt.balanceOf(address(vault));
         uint256 cBefore = cngn.balanceOf(address(vault));
         vm.expectEmit(true, false, false, true, address(vault));
-        emit Swapped(0, address(cngn), address(usdt), 13_615e6, 10_003_674);
+        emit Swapped(0, address(cngn), address(usdt), 13_615e6, 10_003_674, address(reactor));
         uint256 out = _sellNgn(10e6, 0);
         assertEq(out, usdt.balanceOf(address(vault)) - before);
         assertEq(out, 10_003_674);
@@ -335,6 +341,11 @@ contract RfqSwapTest is Test {
         vm.warp(block.timestamp + 6 hours + 1);
         vm.expectRevert(Vault.StalePrice.selector);
         _sellNgn(10e6, 0);
+    }
+
+    function test_SetVenue_RequiresLabel() public {
+        vm.expectRevert(VaultFactory.InvalidParam.selector);
+        factory.setVenue(address(0xD3C), address(0xD3C), true, "");
     }
 
     function test_OracleParamsCappedAt10Percent() public {
