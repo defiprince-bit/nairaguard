@@ -6,6 +6,7 @@ import type { Db, RfqOutcome } from './db.js';
 import type { FeedReading } from './feed.js';
 import type { VaultState } from './loop.js';
 import { computePnl, getBaseline } from './pnl.js';
+import { STATS_DEFAULT_CHAIN_ID } from './config.js';
 
 /** design.md §4 source allowlist. */
 export const WAITLIST_SOURCES = new Set(['x', 'celo-ng', 'celo-africa-dao', 'minipay', 'whatsapp-freelancers', 'referral']);
@@ -30,6 +31,8 @@ export type ApiDeps = {
   siwe: { domain: string; uri: string; chainId: number; client: Client };
   /** Agent considered unhealthy when its last ok run is older than this. */
   staleAfterMs?: number;
+  /** Chain whose rows this API reports (P&L, volume, stats default). Defaults to mainnet 42220. */
+  chainId?: number;
   now?: () => Date;
 };
 
@@ -65,6 +68,7 @@ const json = (status: number, body: unknown): ApiResponse => ({ status, body });
 
 export function createApi(d: ApiDeps) {
   const now = () => d.now?.() ?? new Date();
+  const chainId = d.chainId ?? STATS_DEFAULT_CHAIN_ID;
   const decOf = (t: 'cNGN' | 'USDT') => (t === 'cNGN' ? d.decimals?.cngn : d.decimals?.usdt) ?? 18;
   const pnlDec = { ngn: decOf('cNGN'), usd: decOf('USDT') };
   const m = (t: 'cNGN' | 'USDT', amount: string, rate: number, at: Date | string) => money(t, amount, rate, at, decOf(t));
@@ -73,7 +77,7 @@ export function createApi(d: ApiDeps) {
 
   async function latestQuote(vault: string) {
     const r = await d.db.query<{ rate: string; ngn_balance: string; usd_balance: string; created_at: string }>(
-      'SELECT * FROM quotes WHERE vault=$1 ORDER BY created_at DESC, id DESC LIMIT 1', [vault]);
+      'SELECT * FROM quotes WHERE vault=$1 AND chain_id=$2 ORDER BY created_at DESC, id DESC LIMIT 1', [vault, chainId]);
     return r.rows[0];
   }
 
@@ -88,7 +92,7 @@ export function createApi(d: ApiDeps) {
     if (!rate) return json(503, { error: 'no_rate_yet' });
     const bal = [m('cNGN', ngn, rate, rateAt), m('USDT', usd, rate, rateAt)];
     const total = Number(bal[0]!.amountNgn) + Number(bal[1]!.amountNgn);
-    const b = await getBaseline(d.db, vault);
+    const b = await getBaseline(d.db, vault, chainId);
     const p = b ? computePnl(b, ngn, usd, rate, pnlDec) : undefined;
     return json(200, {
       balances: bal,
@@ -113,7 +117,7 @@ export function createApi(d: ApiDeps) {
   /** Traded volume in USD from actual amounts: the USD₮ leg of each confirmed swap (amount_out when USD₮ is received). */
   async function volumeUsd(vault: string): Promise<string> {
     const r = await d.db.query<{ token_in: string; amount_in: string | null; amount_out: string | null }>(
-      `SELECT token_in, amount_in, amount_out FROM activity WHERE lower(vault)=$1 AND kind='swap' AND status='confirmed'`, [vault]);
+      `SELECT token_in, amount_in, amount_out FROM activity WHERE lower(vault)=$1 AND chain_id=$2 AND kind='swap' AND status='confirmed'`, [vault, chainId]);
     let total = 0n;
     for (const a of r.rows) {
       const usdLeg = a.token_in?.toLowerCase() === d.tokens.usdt.toLowerCase() ? a.amount_in : a.amount_out;
@@ -251,7 +255,7 @@ export function createApi(d: ApiDeps) {
 
   async function approvals(vault: string) {
     const r = await d.db.query<Record<string, string>>(
-      `SELECT a.*, (SELECT rate FROM quotes q WHERE q.vault=lower(a.vault) ORDER BY q.created_at DESC LIMIT 1) AS rate
+      `SELECT a.*, (SELECT rate FROM quotes q WHERE q.vault=lower(a.vault) AND q.chain_id=a.chain_id ORDER BY q.created_at DESC LIMIT 1) AS rate
        FROM approvals a WHERE lower(a.vault)=$1
          AND (a.status IN ('pending','approved','executed','rejected','expired'))
        ORDER BY a.created_at DESC LIMIT 100`,
@@ -288,6 +292,9 @@ export function createApi(d: ApiDeps) {
     const since = q.get('since');
     if (since && Number.isNaN(Date.parse(since))) return json(400, { error: 'since_invalid' });
     const sinceIso = since ? new Date(since).toISOString() : '1970-01-01T00:00:00Z';
+    const cq = q.get('chainId');
+    if (cq != null && !/^[1-9][0-9]{0,9}$/.test(cq)) return json(400, { error: 'chainId_invalid' });
+    const statsChain = cq != null ? Number(cq) : STATS_DEFAULT_CHAIN_ID;
     const agg = `count(*)::int AS requested,
         count(*) FILTER (WHERE quoted)::int AS quoted,
         count(*) FILTER (WHERE outcome='filled')::int AS filled,
@@ -312,11 +319,12 @@ export function createApi(d: ApiDeps) {
       // Market (quote) vs official (Chainlink) rate, bps. Positive = market gives more ₦ per $.
       avgGapBps: r.avg_gap_bps != null ? Math.round(Number(r.avg_gap_bps)) : null,
     });
-    const tot = await d.db.query<Record<string, number | null>>(`SELECT ${agg} FROM textile_quotes WHERE requested_at >= $1`, [sinceIso]);
+    const tot = await d.db.query<Record<string, number | null>>(`SELECT ${agg} FROM textile_quotes WHERE requested_at >= $1 AND chain_id = $2`, [sinceIso, statsChain]);
     const wk = await d.db.query<Record<string, number | null> & { week: string | Date }>(
-      `SELECT date_trunc('week', requested_at) AS week, ${agg} FROM textile_quotes WHERE requested_at >= $1
-       GROUP BY 1 ORDER BY 1 DESC LIMIT 26`, [sinceIso]);
+      `SELECT date_trunc('week', requested_at) AS week, ${agg} FROM textile_quotes WHERE requested_at >= $1 AND chain_id = $2
+       GROUP BY 1 ORDER BY 1 DESC LIMIT 26`, [sinceIso, statsChain]);
     return json(200, {
+      chainId: statsChain,
       since: since ? sinceIso : null,
       ...shape(tot.rows[0]!),
       weekly: wk.rows.map((r) => ({ weekStart: iso(r.week), ...shape(r) })),

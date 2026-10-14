@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { AGENT_CHAIN_ID } from './config.js';
 
 /** Minimal query interface satisfied by both `pg` Pool and PGlite. */
 export interface Db {
@@ -47,15 +48,17 @@ export type ActivityRow = {
   /** Pair label from the factory for the target in the vault's Swapped event. */
   venue?: string | null;
   venueTarget?: string | null;
+  /** Defaults to this agent's chain (AGENT_CHAIN_ID). */
+  chainId?: number;
 };
 
 export async function insertActivity(db: Db, a: ActivityRow): Promise<void> {
   await db.query(
-    `INSERT INTO activity (vault, kind, token_in, token_out, amount_in, min_out, usd_value, rate, reason, tx_hash, status, amount_out, venue, venue_target)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+    `INSERT INTO activity (vault, kind, token_in, token_out, amount_in, min_out, usd_value, rate, reason, tx_hash, status, amount_out, venue, venue_target, chain_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
     [a.vault, a.kind, a.tokenIn ?? null, a.tokenOut ?? null, a.amountIn ?? null, a.minOut ?? null,
      a.usdValue ?? null, a.rate ?? null, a.reason, a.txHash ?? null, a.status, a.amountOut ?? null,
-     a.venue ?? null, a.venueTarget?.toLowerCase() ?? null],
+     a.venue ?? null, a.venueTarget?.toLowerCase() ?? null, a.chainId ?? AGENT_CHAIN_ID],
   );
 }
 
@@ -63,14 +66,14 @@ export async function insertApproval(
   db: Db,
   a: {
     vault: string; onchainId: string; tokenIn: string; tokenOut: string; amountIn: string;
-    minOut: string; usdValue: string; reason: string; txHash: string; expiresAt: Date; ngnShareBps?: number;
+    minOut: string; usdValue: string; reason: string; txHash: string; expiresAt: Date; ngnShareBps?: number; chainId?: number;
   },
 ): Promise<void> {
   await db.query(
-    `INSERT INTO approvals (vault, onchain_id, token_in, token_out, amount_in, min_out, usd_value, reason, tx_hash, expires_at, ngn_share_bps)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (vault, onchain_id) DO NOTHING`,
+    `INSERT INTO approvals (vault, onchain_id, token_in, token_out, amount_in, min_out, usd_value, reason, tx_hash, expires_at, ngn_share_bps, chain_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (vault, onchain_id) DO NOTHING`,
     [a.vault, a.onchainId, a.tokenIn, a.tokenOut, a.amountIn, a.minOut, a.usdValue, a.reason, a.txHash,
-     a.expiresAt.toISOString(), a.ngnShareBps ?? null],
+     a.expiresAt.toISOString(), a.ngnShareBps ?? null, a.chainId ?? AGENT_CHAIN_ID],
   );
 }
 
@@ -82,8 +85,8 @@ export async function hasPendingApproval(db: Db, vault: string, now: Date): Prom
   return (r.rows[0]?.n ?? 0) > 0;
 }
 
-export async function recordRun(db: Db, vault: string, ok: boolean, error?: string): Promise<void> {
-  await db.query(`INSERT INTO agent_runs (vault, ok, error) VALUES ($1,$2,$3)`, [vault, ok, error ?? null]);
+export async function recordRun(db: Db, vault: string, ok: boolean, error?: string, chainId = AGENT_CHAIN_ID): Promise<void> {
+  await db.query(`INSERT INTO agent_runs (vault, ok, error, chain_id) VALUES ($1,$2,$3,$4)`, [vault, ok, error ?? null, chainId]);
 }
 
 /** Default wait before re-proposing a trade the owner rejected. */
@@ -125,7 +128,7 @@ export type RfqQuoteRow = {
   vault: string; venue: string; side: 'ngnToUsd' | 'usdToNgn'; tokenIn: string; tokenOut: string; sellAmount: string;
   sizeUsd?: number; quoted: boolean; takerPays?: string; buyAmount?: string; rate?: number;
   feedRate?: number | null; feedUpdatedAt?: Date; expiresAt?: Date; approvalId?: string;
-  outcome: RfqOutcome; outcomeReason?: string; txHash?: string; amountOut?: string; requestedAt: Date;
+  outcome: RfqOutcome; outcomeReason?: string; txHash?: string; amountOut?: string; requestedAt: Date; chainId?: number;
 };
 
 /** One row per RFQ, whatever happened (design.md §8). */
@@ -133,12 +136,12 @@ export async function insertRfqQuote(db: Db, q: RfqQuoteRow): Promise<void> {
   await db.query(
     `INSERT INTO textile_quotes (vault, venue, side, token_in, token_out, sell_amount, size_usd, quoted, taker_pays, buy_amount,
        rate_ngn_per_usd, feed_rate_ngn_per_usd, feed_updated_at, expires_at, approval_id, outcome, outcome_reason, tx_hash,
-       amount_out, requested_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+       amount_out, requested_at, chain_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
     [q.vault.toLowerCase(), q.venue, q.side, q.tokenIn, q.tokenOut, q.sellAmount, q.sizeUsd ?? null, q.quoted,
      q.takerPays ?? null, q.buyAmount ?? null, q.rate ?? null, q.feedRate ?? null, q.feedUpdatedAt?.toISOString() ?? null,
      q.expiresAt?.toISOString() ?? null, q.approvalId ?? null, q.outcome, q.outcomeReason ?? null, q.txHash ?? null,
-     q.amountOut ?? null, q.requestedAt.toISOString()]);
+     q.amountOut ?? null, q.requestedAt.toISOString(), q.chainId ?? AGENT_CHAIN_ID]);
 }
 
 /** On-chain SwapApproved: approval → approved, with its execution window. */
