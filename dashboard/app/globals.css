@@ -13,6 +13,26 @@
   --border: #e4e8e3;
   --radius-card: 16px;
   --radius-btn: 12px;
+  /* Bento overview tokens (ui-spec §2, v2) */
+  --bg-app: #eef1ef;
+  --ink-strong: #0b1f17;
+  --ink-soft: #2a3a33;
+  --ink-faint: #9aa7a1;
+  --line: #d9e1dd;
+  --tile: #f5f7f6;
+  --tile-2: #f1f4f2;
+  --mint: #7cf2c1;
+  --mint-2: #9bf7c9;
+  --lime: #b6f56a;
+  --lime-glow: #c8ff7a;
+  --forest: #0b4a30;
+  --dark-muted: #9fb5ab;
+  --dark-line: #2d4238;
+  --badge: #ff6b4a;
+  --loss: #d64545;
+  --loss-soft: #fdecec;
+  --radius-bento: 24px;
+  --shadow-bento: 0 1px 2px rgba(11, 31, 23, 0.04), 0 8px 24px rgba(11, 31, 23, 0.05);
   --font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 

@@ -33,6 +33,8 @@ Type uses the system font stack (fast inside MiniPay), with tabular numbers for 
 | Body | 15/22 | 400 |
 | Small | 13/18 | 400 |
 
+**Bento overview tokens (v2, `globals.css`):** `--bg-app #eef1ef`, `--ink-strong #0b1f17` (dark pills, nav, approval banner), `--forest #0b4a30`, `--brand #0e7a4f`, `--mint #7cf2c1`, `--mint-2 #9bf7c9`, `--lime #b6f56a`, `--lime-glow #c8ff7a` (savings card gradient, countdown), `--ink-faint #9aa7a1` (grey decimals), `--line #d9e1dd`, `--tile #f5f7f6`, `--tile-2 #f1f4f2`, `--dark-muted #9fb5ab`, `--dark-line #2d4238`, `--badge #ff6b4a`, `--loss #d64545`, `--radius-bento 24px`, `--shadow-bento`. Logo v2 (`/icon-v2.svg`, `/logo-v2.svg`) uses only these hexes.
+
 Spacing uses a 4px scale (4, 8, 12, 16, 24, 32). Card radius is 16px, button radius 12px. Tap targets are at least 44px tall.
 
 ## 3. Components

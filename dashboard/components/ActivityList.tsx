@@ -11,6 +11,10 @@ import { getJson } from '../lib/overview';
 import type { ActivityItem } from '../lib/types';
 
 const PAGE = 20;
+
+type Page = { items: ActivityItem[]; nextCursor?: string | null };
+export const activityPath = (vault: string, cursor?: string | null) =>
+  `vault/${vault.toLowerCase()}/activity?limit=${PAGE}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
 const FILTERS: { id: Filter; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'executed', label: 'Executed' },
@@ -22,27 +26,49 @@ export function ActivityList({ vault }: { vault: `0x${string}` }) {
   const [items, setItems] = useState<ActivityItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
-  const [shown, setShown] = useState(PAGE);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [more, setMore] = useState(false);
+  const [moreErr, setMoreErr] = useState<string | null>(null);
 
   async function load() {
     setError(null);
     setItems(null);
     try {
-      const r = await getJson<{ items: ActivityItem[] }>(`vault/${vault.toLowerCase()}/activity`);
+      const r = await getJson<Page>(activityPath(vault));
       if (!r.ok) throw new Error(String(r.status));
       setItems(r.data?.items ?? []);
+      setCursor(r.data?.nextCursor ?? null);
     } catch {
       setError('Could not load your activity. Try again.');
       setItems([]);
     }
   }
+  async function loadMore() {
+    if (!cursor) return;
+    setMore(true);
+    setMoreErr(null);
+    try {
+      const r = await getJson<Page>(activityPath(vault, cursor));
+      if (!r.ok) throw new Error(String(r.status));
+      setItems((prev) => {
+        const seen = new Set((prev ?? []).map((i) => i.id));
+        return [...(prev ?? []), ...(r.data?.items ?? []).filter((i) => !seen.has(i.id))];
+      });
+      setCursor(r.data?.nextCursor ?? null);
+    } catch {
+      setMoreErr('Could not load more. Try again.');
+    } finally {
+      setMore(false);
+    }
+  }
+
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vault]);
 
   const filtered = useMemo(() => (items ?? []).filter((i) => matchesFilter(i, filter)), [items, filter]);
-  const groups = useMemo(() => groupByDay(filtered.slice(0, shown)), [filtered, shown]);
+  const groups = useMemo(() => groupByDay(filtered), [filtered]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -52,7 +78,7 @@ export function ActivityList({ vault }: { vault: `0x${string}` }) {
             key={f.id}
             role="tab"
             aria-selected={filter === f.id}
-            onClick={() => { setFilter(f.id); setShown(PAGE); }}
+            onClick={() => setFilter(f.id)}
             style={{
               minHeight: 44,
               padding: '0 14px',
@@ -87,9 +113,10 @@ export function ActivityList({ vault }: { vault: `0x${string}` }) {
               {g.items.map((it) => <TradeRow key={it.id} item={it} />)}
             </section>
           ))}
-          {filtered.length > shown ? (
-            <Button variant="secondary" fullWidth onClick={() => setShown((n) => n + PAGE)}>
-              Load more
+          {moreErr ? <ErrorBanner message={moreErr} onRetry={loadMore} /> : null}
+          {cursor ? (
+            <Button variant="secondary" fullWidth onClick={loadMore} disabled={more}>
+              {more ? 'Loading…' : 'Load more'}
             </Button>
           ) : null}
         </>

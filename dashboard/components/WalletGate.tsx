@@ -6,7 +6,7 @@ import { ErrorBanner } from './ErrorBanner';
 import { Skeleton } from './Skeleton';
 import { shorten, useWallet } from '../lib/wallet';
 
-export function WalletGate({ children }: { children: (address: string, miniPay: boolean) => ReactNode }) {
+export function WalletGate({ children, bare }: { children: (address: string, miniPay: boolean) => ReactNode; /** Skip the default header (screens with their own top bar). */ bare?: boolean }) {
   const { address, miniPay, connecting, error, connect, setError } = useWallet();
 
   if (connecting && !address) {
@@ -53,6 +53,8 @@ export function WalletGate({ children }: { children: (address: string, miniPay: 
     );
   }
 
+  if (bare) return <>{children(address, miniPay)}</>;
+
   return (
     <div style={{ paddingBottom: 72 }}>
       <header
@@ -66,7 +68,7 @@ export function WalletGate({ children }: { children: (address: string, miniPay: 
         }}
       >
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          <img src="/logo.svg" alt="" width={28} height={28} style={{ borderRadius: 8 }} />
+          <img src="/logo-v2.svg" alt="" width={28} height={28} style={{ borderRadius: 8 }} />
           <strong style={{ color: 'var(--brand)' }}>NairaGuard</strong>
         </span>
         <span className="small" style={{ color: 'var(--ink-muted)' }}>

@@ -1,11 +1,12 @@
 import { AmountText } from './AmountText';
 import { StatusChip } from './StatusChip';
 import type { ActivityItem } from '../lib/types';
-import { tradeOut, txUrl } from '../lib/format';
+import { noRate, rejectedLabel, tradeOut, txUrl } from '../lib/format';
 
 
-function mapStatus(s: ActivityItem['status']): 'pending' | 'executed' | 'failed' {
+function mapStatus(s: ActivityItem['status']): 'pending' | 'executed' | 'failed' | 'rejected' {
   if (s === 'confirmed') return 'executed';
+  if (s === 'rejected') return 'rejected';
   if (s === 'failed') return 'failed';
   return 'pending';
 }
@@ -32,7 +33,7 @@ export function TradeRow({ item }: { item: ActivityItem }) {
   const out = tradeOut(item);
   return (
     <a
-      href={celoscan}
+      href={item.txHash ? celoscan : undefined}
       target="_blank"
       rel="noreferrer"
       style={{
@@ -51,7 +52,9 @@ export function TradeRow({ item }: { item: ActivityItem }) {
         </strong>
         <StatusChip status={mapStatus(item.status)} />
       </div>
-      {item.in && out ? (
+      {(item.kind === 'swap' && (noRate(item.in) || (out && noRate(out.money)))) || (item.kind !== 'swap' && noRate(item.in ?? item.out)) ? (
+        <p className="small" style={{ margin: '0 0 6px', color: 'var(--warn)', fontWeight: 600 }}>Rate unavailable</p>
+      ) : item.in && out ? (
         <div style={{ display: 'flex', gap: 16, marginBottom: 6 }}>
           <AmountText
             amountNgn={Number(item.in.amountNgn)}
@@ -85,7 +88,8 @@ export function TradeRow({ item }: { item: ActivityItem }) {
         {item.reason}
       </p>
       <p className="small" style={{ margin: 0, color: 'var(--ink-muted)' }}>
-        {timeLabel(item.at)} · <span style={{ textDecoration: 'underline' }}>View on explorer ↗</span>
+        {item.status === 'rejected' ? rejectedLabel(item.at) : timeLabel(item.at)}
+        {item.txHash ? <> · <span style={{ textDecoration: 'underline' }}>View on explorer ↗</span></> : null}
       </p>
     </a>
   );

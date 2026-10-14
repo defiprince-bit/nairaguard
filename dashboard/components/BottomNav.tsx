@@ -2,76 +2,27 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import s from './BottomNav.module.css';
 
-const items = [
+export const NAV_ITEMS = [
   { href: '/app', label: 'Overview', exact: true },
   { href: '/app/activity', label: 'Activity' },
   { href: '/app/approvals', label: 'Approvals', badgeKey: 'approvals' as const },
   { href: '/app/limits', label: 'Limits' },
 ];
 
-export function BottomNav({ approvalCount = 0 }: { approvalCount?: number }) {
+export function BottomNav({ approvalCount = 0, hideWide }: { approvalCount?: number; /** Hide at ≥1000px where a sidebar is shown. */ hideWide?: boolean }) {
   const path = usePathname();
   return (
-    <nav
-      style={{
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        background: 'var(--surface)',
-        borderTop: '1px solid var(--border)',
-        display: 'flex',
-        justifyContent: 'center',
-        zIndex: 20,
-      }}
-    >
-      <div
-        style={{
-          maxWidth: 480,
-          width: '100%',
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-        }}
-      >
-        {items.map((item) => {
+    <nav className={`${s.nav} ${hideWide ? s.hideWide : ''}`} aria-label="Main">
+      <div className={s.inner}>
+        {NAV_ITEMS.map((item) => {
           const active = item.exact ? path === item.href : path.startsWith(item.href);
+          const n = item.badgeKey === 'approvals' ? approvalCount : 0;
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              style={{
-                textDecoration: 'none',
-                color: active ? 'var(--brand)' : 'var(--ink-muted)',
-                fontWeight: active ? 700 : 500,
-                fontSize: 12,
-                lineHeight: '16px',
-                padding: '10px 4px 12px',
-                textAlign: 'center',
-                minHeight: 44,
-                position: 'relative',
-              }}
-            >
+            <Link key={item.href} href={item.href} className={`${s.item} ${active ? s.on : ''}`} aria-current={active ? 'page' : undefined}>
               {item.label}
-              {item.badgeKey === 'approvals' && approvalCount > 0 ? (
-                <span
-                  style={{
-                    position: 'absolute',
-                    top: 6,
-                    right: '18%',
-                    minWidth: 16,
-                    height: 16,
-                    borderRadius: 999,
-                    background: 'var(--danger)',
-                    color: '#fff',
-                    fontSize: 10,
-                    lineHeight: '16px',
-                    padding: '0 4px',
-                  }}
-                >
-                  {approvalCount}
-                </span>
-              ) : null}
+              {n > 0 ? <span className={s.badge} aria-label={`${n} waiting`}>{n}</span> : null}
             </Link>
           );
         })}
