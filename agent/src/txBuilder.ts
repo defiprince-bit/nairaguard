@@ -19,6 +19,7 @@ import {
   type Transport,
   concatHex,
   createWalletClient,
+  encodeDeployData,
   encodeFunctionData,
 } from 'viem';
 import { ATTRIBUTION_TAG } from './config.js';
@@ -65,6 +66,26 @@ export function buildContractCall<
   return { to: args.address, data: tagCalldata(data), value: args.value };
 }
 
+/** Throws unless calldata / initcode ends with our ERC-8021 suffix. Use as a last check before sending. */
+export function assertTagged(data: Hex): Hex {
+  if (!isTagged(data) || !data.toLowerCase().endsWith(ATTRIBUTION_SUFFIX.slice(2).toLowerCase())) {
+    throw new Error(`refusing to send: calldata does not end with attribution tag ${ATTRIBUTION_TAG}`);
+  }
+  return data;
+}
+
+/** A contract-creation request: tagged initcode (bytecode + ABI-encoded constructor args + suffix). */
+export type TaggedDeploy = { data: Hex };
+
+/**
+ * Pure: tagged contract creation. The suffix goes after the constructor args; Solidity's constructor
+ * decoding ignores trailing bytes (checked by contracts/test/TaggedDeploy.t.sol).
+ */
+export function buildDeploy(args: { abi: Abi; bytecode: Hex; args?: readonly unknown[] }): TaggedDeploy {
+  const data = encodeDeployData({ abi: args.abi, bytecode: args.bytecode, args: args.args ?? [] } as Parameters<typeof encodeDeployData>[0]);
+  return { data: tagCalldata(data) };
+}
+
 /** Pure: build a tagged plain transfer. */
 export function buildTransfer(to: `0x${string}`, value: bigint): TaggedTx {
   return { to, value, data: tagCalldata() };
@@ -88,6 +109,17 @@ export function createTxSender(opts: { account: Account; chain: Chain; transport
         to: tx.to,
         data,
         value: tx.value,
+        gas: tx.gas,
+        nonce: tx.nonce,
+      } as Parameters<typeof client.sendTransaction>[0]);
+    },
+    /** Contract creation (no `to`). Refuses initcode without the tag; withAttribution re-appends it. */
+    async deploy(tx: TaggedDeploy & { gas?: bigint; nonce?: number }): Promise<Hex> {
+      assertTagged(tx.data);
+      return client.sendTransaction({
+        account: opts.account,
+        chain: opts.chain,
+        data: stripTag(tx.data),
         gas: tx.gas,
         nonce: tx.nonce,
       } as Parameters<typeof client.sendTransaction>[0]);

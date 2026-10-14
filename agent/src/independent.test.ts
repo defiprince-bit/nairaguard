@@ -135,3 +135,44 @@ describe('excluded_wallets migration', () => {
     await expect(db.query(`INSERT INTO excluded_wallets (address, reason) VALUES ('0xABC','test')`)).rejects.toThrow();
   });
 });
+
+describe('selectCandidates', () => {
+  const FAC = '0x4fa967c761ed1ddb642fe62fcb9ab7b924df5310';
+  async function seed() {
+    const db = new PGlite() as unknown as Db;
+    await migrate(db);
+    const v = (vault: number, owner: number, chain: number, factory = FAC) => db.query(
+      `INSERT INTO vaults (vault, owner, factory, chain_id, created_block, created_tx) VALUES ($1,$2,$3,$4,1,'0x')`,
+      [a(1000 + vault), a(owner), factory, chain]);
+    await v(1, 1, 42220);
+    await v(2, 2, 42220, a(777));
+    await v(3, 3, 11142220); // Sepolia vault: never counted
+    const wl = (owner: number, verified: boolean, chain: number | null) => db.query(
+      `INSERT INTO waitlist (wallet_address, consent, verified, verified_chain_id) VALUES ($1,true,$2,$3)`, [a(owner), verified, chain]);
+    await wl(1, true, 42220); // also a vault owner: deduped
+    await wl(4, true, null); // SIWE on mainnet
+    await wl(5, true, 11142220); // verified only via Sepolia: excluded
+    await wl(6, false, null); // unverified
+    return db;
+  }
+
+  it('keys off mainnet vault owners by default', async () => {
+    const { selectCandidates } = await import('./independent.js');
+    const r = await selectCandidates(await seed());
+    expect(r.wallets.sort()).toEqual([a(1), a(2)]);
+  });
+
+  it('can restrict to one factory and include non-Sepolia waitlist wallets', async () => {
+    const { selectCandidates } = await import('./independent.js');
+    const db = await seed();
+    expect((await selectCandidates(db, { factory: FAC })).wallets).toEqual([a(1)]);
+    const r = await selectCandidates(db, { includeWaitlist: true });
+    expect(r.wallets.sort()).toEqual([a(1), a(2), a(4)]);
+    expect(r.wallets).not.toContain(a(5));
+  });
+
+  it('refuses to count Sepolia', async () => {
+    const { selectCandidates } = await import('./independent.js');
+    await expect(selectCandidates(await seed(), { chainId: 11142220 })).rejects.toThrow(/Sepolia/);
+  });
+});

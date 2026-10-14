@@ -1,5 +1,8 @@
 import { type Hex, type Log, decodeEventLog, formatUnits, parseUnits } from 'viem';
-import { type Db, hasPendingApproval, insertActivity, insertApproval, recordRun } from './db.js';
+import {
+  type Db, hasPendingApproval, insertActivity, insertApproval, recentRejection, recordRun,
+  REJECT_COOLDOWN_MS, REJECT_DRIFT_CHANGE_BPS,
+} from './db.js';
 import { decide, type StrategyDecision } from './strategy.js';
 import { logQuote, valueNgn } from './pnl.js';
 import type { RateSource } from './textile.js';
@@ -41,6 +44,8 @@ export type LoopDeps = {
   db: Db;
   now?: () => Date;
   bandBps?: number;
+  /** Wait after an owner rejection before re-proposing the same pair + direction. */
+  rejectCooldownMs?: number;
 };
 
 export type RunResult = { decision: StrategyDecision; txHash?: Hex; skipped?: string };
@@ -84,6 +89,13 @@ export async function runOnce(d: LoopDeps): Promise<RunResult> {
     if (decision.action === 'propose' && (await hasPendingApproval(d.db, d.vault, now))) {
       return skip('A proposal is already waiting for your approval.');
     }
+    const ngnShareBps = shareBps(s.ngnBalance, s.usdBalance, rate);
+    if (decision.action === 'propose') {
+      const [pin, pout] = decision.direction === 'ngnToUsd' ? [d.cngn, d.usdt] : [d.usdt, d.cngn];
+      const rej = await recentRejection(d.db, d.vault, pin, pout, now, d.rejectCooldownMs ?? REJECT_COOLDOWN_MS);
+      const driftMoved = rej?.ngnShareBps != null && Math.abs(ngnShareBps - rej.ngnShareBps) >= REJECT_DRIFT_CHANGE_BPS;
+      if (rej && !driftMoved) return skip('You declined this trade recently, so the agent is waiting before asking again.');
+    }
 
     let usdValue = toUnits(decision.usdValue);
     // Never request more than the on-chain caps (float rounding guard).
@@ -103,6 +115,18 @@ export async function runOnce(d: LoopDeps): Promise<RunResult> {
 
     const r = await d.chain.send(tx);
     const status = r.status === 'success' ? 'confirmed' : 'failed';
+
+    // Actual amount out: the vault's Swapped event, else the tokenOut balance delta. Never minOut.
+    let after: VaultState | undefined;
+    let amountOut: bigint | undefined;
+    if (decision.action === 'swap' && status === 'confirmed') {
+      amountOut = swappedAmountOut(r.logs, d.vault);
+      after = await d.chain.readState();
+      if (amountOut === undefined) {
+        amountOut = decision.direction === 'ngnToUsd' ? after.usdBalance - s.usdBalance : after.ngnBalance - s.ngnBalance;
+        if (amountOut < 0n) amountOut = undefined;
+      }
+    }
     await insertActivity(d.db, {
       vault: d.vault,
       kind: decision.action,
@@ -110,6 +134,7 @@ export async function runOnce(d: LoopDeps): Promise<RunResult> {
       tokenOut,
       amountIn: amountIn.toString(),
       minOut: minOut.toString(),
+      amountOut: amountOut?.toString(),
       usdValue: usdValue.toString(),
       rate: String(rate),
       reason: decision.reason,
@@ -117,9 +142,8 @@ export async function runOnce(d: LoopDeps): Promise<RunResult> {
       status,
     });
 
-    if (decision.action === 'swap' && status === 'confirmed') {
+    if (after) {
       // Per-swap P&L: value change across the swap at the same rate (fees + slippage).
-      const after = await d.chain.readState();
       const fee = valueNgn(after.ngnBalance, after.usdBalance, rate) - valueNgn(s.ngnBalance, s.usdBalance, rate);
       const p = await logQuote(d.db, d.vault, after.ngnBalance, after.usdBalance, rate, now);
       await d.db.query(
@@ -143,6 +167,7 @@ export async function runOnce(d: LoopDeps): Promise<RunResult> {
               reason: decision.reason,
               txHash: r.hash,
               expiresAt: new Date(Number(ev.args.expiresAt) * 1000),
+              ngnShareBps,
             });
           }
         } catch {
@@ -157,4 +182,25 @@ export async function runOnce(d: LoopDeps): Promise<RunResult> {
     await recordRun(d.db, d.vault, false, (err as Error).message.slice(0, 500)).catch(() => {});
     throw err;
   }
+}
+
+/** amountOut from the vault's own Swapped event in a receipt (ignores logs from other contracts). */
+export function swappedAmountOut(logs: Log[], vault: string): bigint | undefined {
+  for (const log of logs) {
+    if (log.address && log.address.toLowerCase() !== vault.toLowerCase()) continue;
+    try {
+      const ev = decodeEventLog({ abi: vaultAbi, data: log.data, topics: log.topics });
+      if (ev.eventName === 'Swapped') return ev.args.amountOut;
+    } catch {
+      /* not a vault event */
+    }
+  }
+  return undefined;
+}
+
+/** cNGN share of vault value in bps at `rate` (₦ per $1). */
+export function shareBps(ngn: bigint, usd: bigint, rate: number): number {
+  const n = toNum(ngn);
+  const total = n + toNum(usd) * rate;
+  return total > 0 ? Math.round((n / total) * 10_000) : 0;
 }

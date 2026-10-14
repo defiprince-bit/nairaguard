@@ -179,3 +179,35 @@ export class BlockscoutLookup implements ChainLookup {
 }
 
 const ACTIONS = ['txlist', 'tokentx', 'txlistinternal'] as const;
+
+export const SEPOLIA_CHAIN_ID = 11142220;
+export const MAINNET_CHAIN_ID = 42220;
+
+type QueryDb = { query<T>(sql: string, params?: unknown[]): Promise<{ rows: T[] }> };
+
+/**
+ * Wallets to count (design.md §7): owners of vaults created by the factory on `chainId` (default mainnet).
+ * With includeWaitlist, also verified waitlist wallets. Sepolia verifications (verified_chain_id = 11142220)
+ * and Sepolia vaults never count.
+ */
+export async function selectCandidates(
+  db: QueryDb,
+  opts: { factory?: string; chainId?: number; includeWaitlist?: boolean } = {},
+): Promise<{ wallets: string[]; vaultOwners: number; waitlist: number }> {
+  const chainId = opts.chainId ?? MAINNET_CHAIN_ID;
+  if (chainId === SEPOLIA_CHAIN_ID) throw new Error('the independent-user count never uses Celo Sepolia');
+  const owners = await db.query<{ w: string }>(
+    `SELECT DISTINCT lower(owner) AS w FROM vaults WHERE chain_id=$1 AND ($2::text IS NULL OR lower(factory)=lower($2))`,
+    [chainId, opts.factory ?? null]);
+  const out = new Set(owners.rows.map((r) => r.w));
+  let waitlist = 0;
+  if (opts.includeWaitlist) {
+    const wl = await db.query<{ w: string }>(
+      `SELECT DISTINCT lower(wallet_address) AS w FROM waitlist
+       WHERE verified AND wallet_address IS NOT NULL AND verified_chain_id IS DISTINCT FROM $1`,
+      [SEPOLIA_CHAIN_ID]);
+    waitlist = wl.rows.length;
+    for (const r of wl.rows) out.add(r.w);
+  }
+  return { wallets: [...out], vaultOwners: owners.rows.length, waitlist };
+}

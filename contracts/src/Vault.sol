@@ -53,6 +53,8 @@ contract Vault {
     mapping(uint256 id => Approval) public approvals;
     /// @dev USD notional for each proposal (needed to enforce daily limit at approve-time).
     mapping(uint256 id => uint256) public approvalUsdValue;
+    /// @notice Owner rejected this proposal. Final: it can never be approved or rejected again.
+    mapping(uint256 id => bool) public rejected;
 
     Limits public limits;
     uint256 public dailySpentUsd;
@@ -76,6 +78,7 @@ contract Vault {
     error ApprovalExpired();
     error ApprovalAlreadyExecuted();
     error ApprovalNotFound();
+    error ApprovalRejected();
     error TransferFailed();
     error InvalidLimits();
     error AlreadyInitialized();
@@ -84,6 +87,7 @@ contract Vault {
     event Withdrawn(address indexed token, uint256 amount, address indexed to);
     event Swapped(uint256 indexed id, address tokenIn, address tokenOut, uint256 amountIn, uint256 amountOut);
     event SwapProposed(uint256 indexed id, uint64 expiresAt);
+    event SwapRejected(uint256 indexed id);
     event LimitsUpdated(
         uint256 maxTradeUsd,
         uint256 maxDailyUsd,
@@ -250,6 +254,7 @@ contract Vault {
         if (paused) revert VaultPaused();
         Approval storage approval = approvals[id];
         if (approval.expiresAt == 0) revert ApprovalNotFound();
+        if (rejected[id]) revert ApprovalRejected();
         if (approval.executed) revert ApprovalAlreadyExecuted();
         if (block.timestamp > approval.expiresAt) revert ApprovalExpired();
 
@@ -261,6 +266,17 @@ contract Vault {
         _enforceSlippage(approval.tokenIn, approval.tokenOut, approval.amountIn, approval.minOut);
 
         amountOut = _executeSwap(id, approval.tokenIn, approval.tokenOut, approval.amountIn, approval.minOut, usdValue);
+    }
+
+    /// @notice Owner declines a pending proposal. Final state; reverts if the id is not pending.
+    function reject(uint256 id) external onlyOwner {
+        Approval storage approval = approvals[id];
+        if (approval.expiresAt == 0) revert ApprovalNotFound();
+        if (rejected[id]) revert ApprovalRejected();
+        if (approval.executed) revert ApprovalAlreadyExecuted();
+        if (block.timestamp > approval.expiresAt) revert ApprovalExpired();
+        rejected[id] = true;
+        emit SwapRejected(id);
     }
 
     function _validateSwap(address tokenIn, address tokenOut, uint256 amountIn, uint256 minOut, uint256 usdValue)
@@ -315,11 +331,13 @@ contract Vault {
         _rollDailyWindow();
         dailySpentUsd += usdValue;
 
+        // amountOut is what actually arrived (vault's tokenOut balance change), not the router's return value.
+        uint256 balBefore = IERC20(tokenOut).balanceOf(address(this));
         _push(tokenIn, router, amountIn);
-        amountOut = ISwapRouter(router).swap(tokenIn, tokenOut, amountIn, minOut);
+        ISwapRouter(router).swap(tokenIn, tokenOut, amountIn, minOut);
+        amountOut = IERC20(tokenOut).balanceOf(address(this)) - balBefore;
         if (amountOut < minOut) revert SlippageTooHigh();
 
-        // Router pays tokenOut to this vault.
         emit Swapped(id, tokenIn, tokenOut, amountIn, amountOut);
     }
 

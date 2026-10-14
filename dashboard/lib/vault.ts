@@ -11,7 +11,7 @@ export const ATTRIBUTION_SUFFIX: Hex = toDataSuffix(ATTRIBUTION_TAG);
 
 export const ZERO = '0x0000000000000000000000000000000000000000' as const;
 /** Celo Sepolia VaultFactory; override with NEXT_PUBLIC_FACTORY_ADDRESS (required for mainnet). */
-export const SEPOLIA_FACTORY = '0x4fa967c761eD1ddB642Fe62Fcb9aB7B924Df5310' as const;
+export const SEPOLIA_FACTORY = '0x6C5b2087b321F2eb1cCC2BEA915503bAceD608E1' as const;
 export const FACTORY_ADDRESS = (process.env.NEXT_PUBLIC_FACTORY_ADDRESS ||
   (process.env.NEXT_PUBLIC_NETWORK === 'celo' ? '' : SEPOLIA_FACTORY)) as `0x${string}` | '';
 
@@ -35,10 +35,23 @@ export type Limits = {
 export type PresetId = 'careful' | 'balanced' | 'active';
 const usd = (n: number) => parseUnits(String(n), 18);
 /** Presets per ui-spec (limits only; the target is chosen separately). */
+export const DEFAULT_PRESET: PresetId = 'balanced';
 export const PRESETS: Record<PresetId, { label: string; blurb: string; limits: Omit<Limits, 'targetNgnBps'> }> = {
-  careful: { label: 'Careful', blurb: 'Small trades, asks you more often.', limits: { maxTradeUsd: usd(25), maxDailyUsd: usd(100), approvalThresholdUsd: usd(10), maxSlippageBps: 50 } },
-  balanced: { label: 'Balanced', blurb: 'Moderate trades, asks above $50.', limits: { maxTradeUsd: usd(100), maxDailyUsd: usd(500), approvalThresholdUsd: usd(50), maxSlippageBps: 100 } },
-  active: { label: 'Active', blurb: 'Larger trades, asks above $200.', limits: { maxTradeUsd: usd(500), maxDailyUsd: usd(2000), approvalThresholdUsd: usd(200), maxSlippageBps: 100 } },
+  careful: {
+    label: 'Careful',
+    blurb: 'Up to $20 a trade and $50 a day. Asks you before any trade over $5.',
+    limits: { maxTradeUsd: usd(20), maxDailyUsd: usd(50), approvalThresholdUsd: usd(5), maxSlippageBps: 50 },
+  },
+  balanced: {
+    label: 'Balanced',
+    blurb: 'Up to $50 a trade and $150 a day. Asks you before any trade over $25.',
+    limits: { maxTradeUsd: usd(50), maxDailyUsd: usd(150), approvalThresholdUsd: usd(25), maxSlippageBps: 100 },
+  },
+  active: {
+    label: 'Active',
+    blurb: 'Up to $200 a trade and $500 a day. Asks you before any trade over $100.',
+    limits: { maxTradeUsd: usd(200), maxDailyUsd: usd(500), approvalThresholdUsd: usd(100), maxSlippageBps: 100 },
+  },
 };
 
 /** Target share kept in naira, in basis points (e.g. 5000 = 50% ₦ / 50% $). */

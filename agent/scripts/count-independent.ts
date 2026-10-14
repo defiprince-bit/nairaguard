@@ -1,6 +1,9 @@
 /**
- * Count independent verified waitlist wallets (read-only; Celo mainnet data via Blockscout).
+ * Count independent users (read-only; Celo mainnet data via Blockscout). Candidates are owners of vaults
+ * created by the VaultFactory on Celo mainnet (design.md §7). Sepolia vaults/verifications never count.
  *   DATABASE_URL=... pnpm tsx scripts/count-independent.ts            # table + JSON
+ *   ... count-independent.ts --include-waitlist                        # also verified waitlist wallets (non-Sepolia)
+ *   ... count-independent.ts --factory 0x… --chain 42220              # restrict to one factory / chain
  *   ... count-independent.ts --cutoff 2026-10-05T23:00:00Z   # override cutoff (or INDEPENDENT_CUTOFF env)
  *   ... count-independent.ts --max-fanout 20                    # intermediary payee limit (or MAX_FANOUT env)
  *   ... count-independent.ts --json                                    # JSON only
@@ -10,7 +13,9 @@
 import { readFileSync } from 'node:fs';
 import { isAddress } from 'viem';
 import { connect, migrate } from '../src/db.js';
-import { BlockscoutLookup, countIndependent, EXCLUDE_REASONS, type ExcludeReason, renderTable } from '../src/independent.js';
+import {
+  BlockscoutLookup, countIndependent, EXCLUDE_REASONS, type ExcludeReason, renderTable, selectCandidates,
+} from '../src/independent.js';
 
 const DEPLOYER = '0x1ab29BDaAc75255501ADBBdcC2150fe4D346C0A7';
 const AGENT = '0xA2A173A481BC063fEE0EF11c67Fc756DC5f928f4';
@@ -36,11 +41,15 @@ if (ex) {
   console.error(`excluded ${ex.toLowerCase()} (${reason})`);
 }
 
-const verified = await db.query<{ w: string }>(
-  'SELECT DISTINCT lower(wallet_address) AS w FROM waitlist WHERE verified AND wallet_address IS NOT NULL');
+const candidates = await selectCandidates(db, {
+  factory: flag('--factory') ?? process.env.MAINNET_FACTORY_ADDRESS,
+  chainId: Number(flag('--chain') ?? 42220),
+  includeWaitlist: args.includes('--include-waitlist'),
+});
+console.error(`candidates: ${candidates.wallets.length} (vault owners ${candidates.vaultOwners}, waitlist ${candidates.waitlist})`);
 const excluded = await db.query<{ address: string; reason: ExcludeReason }>('SELECT address, reason FROM excluded_wallets');
 const result = await countIndependent({
-  verifiedWallets: verified.rows.map((r) => r.w),
+  verifiedWallets: candidates.wallets,
   excluded: excluded.rows,
   teamSources: [DEPLOYER, AGENT],
   lookup: new BlockscoutLookup(process.env.BLOCKSCOUT_API ?? 'https://celo.blockscout.com/api', fetch, Number(process.env.BLOCKSCOUT_MAX_PAGES ?? 5)),
