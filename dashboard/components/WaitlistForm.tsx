@@ -246,13 +246,13 @@ export function WaitlistForm() {
 
       <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <span className="small" style={{ fontWeight: 600 }}>
-          Email or phone
+          WhatsApp number or email
         </span>
         <input
           required
           value={contact}
           onChange={(e) => setContact(e.target.value)}
-          placeholder="you@email.com or +234…"
+          placeholder="+234 801 234 5678 or you@email.com"
           inputMode={/^[+\d]/.test(contact) ? 'tel' : 'email'}
           autoComplete={/^[+\d]/.test(contact) ? 'tel' : 'email'}
           style={{
@@ -263,6 +263,9 @@ export function WaitlistForm() {
             background: 'var(--surface)',
           }}
         />
+        <span className="small" style={{ color: 'var(--ink-muted)' }}>
+          We&apos;ll only message you about early access.
+        </span>
       </label>
 
       <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
