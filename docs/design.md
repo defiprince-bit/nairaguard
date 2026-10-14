@@ -110,6 +110,22 @@ Waitlist verification: users can join without signing (`verified = false`). To v
 
 Writes (approve, set limits, deposit, withdraw) are **signed by the user's wallet in MiniPay**, sent through the tx builder, not via the API.
 
+
+### Field contract (agreed 14 Oct)
+- Vault status: `lastCheckedAt` (ISO time of the agent's last check of **this** vault).
+- Activity: `amountOut` is the **actual** amount, measured as the vault's balance change and emitted in `Swapped(tokenIn, tokenOut, amountIn, amountOut)`. P&L and volume use it, never minimum-out.
+- Approvals: `rateNgnPerUsd` is `null` when there's no quote, and the UI shows "Rate unavailable". There's no fallback rate.
+- P&L: `pnlNgn`, `pnlUsd` and `pnlSince` are all `null` until there's a baseline (first funding).
+
+### Risk presets (Create Vault step 2, "How much freedom should the agent have?", Balanced selected by default)
+| Preset | Max per trade | Daily | Asks above | Slippage |
+|---|---|---|---|---|
+| Careful | $20 | $50 | $5 | 0.5% |
+| Balanced | $50 | $150 | $25 | 1% |
+| Active | $200 | $500 | $100 | 1% |
+
+These are separate from the target presets (step 1).
+
 ## 4. Data (Postgres)
 - `activity` (vault, kind, amounts, rate, reason, tx_hash, status, created_at)
 - `approvals` (vault, onchain_id, amounts, reason, expires_at, status)
