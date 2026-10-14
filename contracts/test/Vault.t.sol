@@ -3,11 +3,13 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {Vault} from "../src/Vault.sol";
+import {VaultFactory} from "../src/VaultFactory.sol";
 import {MockERC20} from "../src/mocks/MockERC20.sol";
 import {MockSwapRouter} from "../src/mocks/MockSwapRouter.sol";
 
 contract VaultTest is Test {
     Vault vault;
+    VaultFactory factory;
     MockERC20 cngn;
     MockERC20 usdt;
     MockSwapRouter router;
@@ -26,7 +28,8 @@ contract VaultTest is Test {
         cngn = new MockERC20("cNGN", "cNGN", 18);
         usdt = new MockERC20(unicode"USD₮", "USDT", 18);
 
-        vault = new Vault(agent, address(cngn), address(usdt));
+        // All existing Vault tests run against a clone created by the factory.
+        factory = new VaultFactory(address(new Vault()), agent, address(cngn), address(usdt));
         router = new MockSwapRouter();
 
         // 1:1 rates for simple assertions (both 18 decimals).
@@ -37,21 +40,23 @@ contract VaultTest is Test {
         cngn.mint(address(router), 1_000_000e18);
         usdt.mint(address(router), 1_000_000e18);
 
-        vault.setSwapRouter(address(router), true);
-        vault.setLimits(
-            Vault.Limits({
-                maxTradeUsd: MAX_TRADE,
-                maxDailyUsd: MAX_DAILY,
-                approvalThresholdUsd: THRESHOLD,
-                maxSlippageBps: MAX_SLIPPAGE_BPS,
-                targetNgnBps: TARGET_NGN_BPS
-            })
-        );
+        factory.setRouter(address(router), true);
+        vault = Vault(factory.createVault(_limits()));
 
         cngn.mint(owner, 1_000_000e18);
         usdt.mint(owner, 1_000_000e18);
         cngn.approve(address(vault), type(uint256).max);
         usdt.approve(address(vault), type(uint256).max);
+    }
+
+    function _limits() internal pure returns (Vault.Limits memory) {
+        return Vault.Limits({
+            maxTradeUsd: MAX_TRADE,
+            maxDailyUsd: MAX_DAILY,
+            approvalThresholdUsd: THRESHOLD,
+            maxSlippageBps: MAX_SLIPPAGE_BPS,
+            targetNgnBps: TARGET_NGN_BPS
+        });
     }
 
     function _depositBoth(uint256 amount) internal {
@@ -195,7 +200,7 @@ contract VaultTest is Test {
 
     function test_Swap_RevertRouterNotAllowed() public {
         _depositBoth(1_000e18);
-        vault.setSwapRouter(address(router), false);
+        factory.setRouter(address(router), false);
 
         uint256 amountIn = 10e18;
         // Can't quote without rates via vault path; call with a plausible minOut.
@@ -204,10 +209,10 @@ contract VaultTest is Test {
         vault.swap(address(cngn), address(usdt), amountIn, 1, 10e18);
     }
 
-    function test_SetSwapRouter_OnlyOwner() public {
+    function test_SetRouter_OnlyFactoryOwner() public {
         vm.prank(stranger);
-        vm.expectRevert(Vault.NotOwner.selector);
-        vault.setSwapRouter(address(router), true);
+        vm.expectRevert(VaultFactory.NotOwner.selector);
+        factory.setRouter(address(router), true);
     }
 
     // ── propose / approve / expiry / double-execute ──────────────────────

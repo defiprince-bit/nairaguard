@@ -4,24 +4,38 @@ import type { ChainPort, VaultState } from './loop.js';
 import { createTxSender } from './txBuilder.js';
 import { erc20Abi, vaultAbi } from './vaultAbi.js';
 
-/** viem-backed ChainPort. All sends go through the tagged txBuilder. */
-export function createChainPort(opts: {
+type PortOpts = {
   publicClient: PublicClient;
   chain: Chain;
   rpcUrl: string;
   privateKey: `0x${string}`;
-  vault: `0x${string}`;
   cngn: `0x${string}`;
   usdt: `0x${string}`;
-}): ChainPort & { address: `0x${string}` } {
-  const { publicClient: pc, vault } = opts;
+};
+
+/** One agent signer shared by every vault; `forVault` gives a per-vault ChainPort. */
+export function createChainPorts(opts: PortOpts): { address: `0x${string}`; forVault(v: `0x${string}`): ChainPort } {
   const sender = createTxSender({
     account: privateKeyToAccount(opts.privateKey),
     chain: opts.chain,
     transport: http(opts.rpcUrl),
   });
+  return { address: sender.address, forVault: (vault) => portFor(opts, sender, vault) };
+}
+
+/** viem-backed ChainPort for a single vault. All sends go through the tagged txBuilder. */
+export function createChainPort(opts: PortOpts & { vault: `0x${string}` }): ChainPort & { address: `0x${string}` } {
+  const ports = createChainPorts(opts);
+  return { address: ports.address, ...ports.forVault(opts.vault) };
+}
+
+function portFor(
+  opts: PortOpts,
+  sender: ReturnType<typeof createTxSender>,
+  vault: `0x${string}`,
+): ChainPort {
+  const pc = opts.publicClient;
   return {
-    address: sender.address,
     async readState(): Promise<VaultState> {
       const [ngn, usd, lim, spent, dayStart, paused] = await Promise.all([
         pc.readContract({ address: opts.cngn, abi: erc20Abi, functionName: 'balanceOf', args: [vault] }),

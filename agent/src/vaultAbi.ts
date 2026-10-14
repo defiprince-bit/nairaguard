@@ -23,3 +23,15 @@ export const mockRouterAbi = parseAbi([
   'function setRate(address token, uint256 rate)',
   'function ratePerToken(address) view returns (uint256)',
 ]);
+
+export const factoryAbi = parseAbi([
+  'function createVault((uint256 maxTradeUsd, uint256 maxDailyUsd, uint256 approvalThresholdUsd, uint16 maxSlippageBps, uint16 targetNgnBps) limits) returns (address)',
+  'function vaultOf(address owner) view returns (address)',
+  'function vaultCount() view returns (uint256)',
+  'function allVaults(uint256) view returns (address)',
+  'event VaultCreated(address indexed owner, address indexed vault)',
+]);
+
+export const vaultEventsAbi = parseAbi([
+  'event Deposited(address indexed token, uint256 amount, address indexed from)',
+]);

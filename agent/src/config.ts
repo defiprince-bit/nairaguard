@@ -8,7 +8,10 @@ export const RPC_URL =
 
 export type NetworkAddresses = {
   chainId: number;
-  vault: `0x${string}`;
+  /** VaultFactory (Task 8a). Vaults are discovered from its VaultCreated logs. */
+  factory: `0x${string}`;
+  /** Factory deploy block: first block the log scan reads. */
+  factoryStartBlock: bigint;
   cngn: `0x${string}`;
   usdt: `0x${string}`;
   swapRouter: `0x${string}`;
@@ -18,7 +21,8 @@ export type NetworkAddresses = {
 export const ADDRESSES: Partial<Record<typeof NETWORK, NetworkAddresses>> = {
   'celo-sepolia': {
     chainId: 11142220,
-    vault: '0xD436aA344C0E2a58a607443680651a2c32066be6',
+    factory: (process.env.FACTORY_ADDRESS ?? '0x4fa967c761eD1ddB642Fe62Fcb9aB7B924Df5310') as `0x${string}`,
+    factoryStartBlock: BigInt(process.env.FACTORY_START_BLOCK ?? 38714846),
     cngn: '0xaA3B7364E418deC4Fb147f1BD2d95A4022082aEA',
     usdt: '0xe123971ec3F56138766272B7b15Ee188fdD0eFf7',
     swapRouter: '0xd834aB4e7caDc62f2E27ab6755ED4B22F0461e86',
