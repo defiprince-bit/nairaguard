@@ -29,7 +29,7 @@ export type ApprovalItem = {
 export type AgentStatus = {
   address: string;
   erc8004Id?: string;
-  lastRunAt: string;
+  lastRunAt: string | null;
   healthy: boolean;
 };
 

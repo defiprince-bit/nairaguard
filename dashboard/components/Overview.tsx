@@ -11,6 +11,7 @@ import type { ActivityItem, AgentStatus, ApprovalItem, BalancesResponse } from '
 
 function agentLine(agent: AgentStatus | null) {
   if (!agent) return null;
+  if (!agent.lastRunAt) return { text: 'Agent not run yet', warn: true };
   const mins = Math.round((Date.now() - new Date(agent.lastRunAt).getTime()) / 60_000);
   const stale = mins > 15 || !agent.healthy;
   if (stale) {

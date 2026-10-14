@@ -2,6 +2,11 @@ import { AmountText } from './AmountText';
 import { StatusChip } from './StatusChip';
 import type { ActivityItem } from '../lib/types';
 
+const EXPLORER =
+  process.env.NEXT_PUBLIC_NETWORK === 'celo'
+    ? 'https://celoscan.io'
+    : 'https://celo-sepolia.blockscout.com';
+
 function mapStatus(s: ActivityItem['status']): 'pending' | 'executed' | 'failed' {
   if (s === 'confirmed') return 'executed';
   if (s === 'failed') return 'failed';
@@ -26,7 +31,7 @@ function timeLabel(iso: string) {
 }
 
 export function TradeRow({ item }: { item: ActivityItem }) {
-  const celoscan = `https://celoscan.io/tx/${item.txHash}`;
+  const celoscan = `${EXPLORER}/tx/${item.txHash}`;
   return (
     <a
       href={celoscan}
