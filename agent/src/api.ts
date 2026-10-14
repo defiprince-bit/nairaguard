@@ -8,9 +8,10 @@ import type { VaultState } from './loop.js';
 import { computePnl, getBaseline } from './pnl.js';
 import { STATS_DEFAULT_CHAIN_ID } from './config.js';
 
-/** design.md §4 source allowlist. */
-export const WAITLIST_SOURCES = new Set(['x', 'celo-ng', 'celo-africa-dao', 'minipay', 'whatsapp-freelancers', 'referral', 'valora']);
-export const normaliseSource = (s: string | null | undefined) => (s && WAITLIST_SOURCES.has(s) ? s : 'direct');
+import { WAITLIST_SOURCES, normaliseSource } from './waitlistSources.js';
+import { unsubscribe as doUnsubscribe, verifyUnsubscribeToken } from './campaign.js';
+
+export { WAITLIST_SOURCES, normaliseSource };
 
 export const hashToken = (t: string) => createHash('sha256').update(t).digest('hex');
 
@@ -33,6 +34,8 @@ export type ApiDeps = {
   staleAfterMs?: number;
   /** Chain whose rows this API reports (P&L, volume, stats default). Defaults to mainnet 42220. */
   chainId?: number;
+  /** HMAC secret for signed unsubscribe links (UNSUBSCRIBE_SECRET). Route answers 503 when unset. */
+  unsubscribeSecret?: string;
   now?: () => Date;
 };
 
@@ -436,6 +439,16 @@ export function createApi(d: ApiDeps) {
     return json(200, { ok: true, verified: true });
   }
 
+  /** Signed link from campaign emails: marks the contact (and its duplicates) unsubscribed. */
+  async function unsubscribe(q: URLSearchParams) {
+    if (!d.unsubscribeSecret) return json(503, { ok: false, error: 'unsubscribe_disabled' });
+    const id = verifyUnsubscribeToken(q.get('c') ?? '', q.get('s') ?? '', d.unsubscribeSecret);
+    if (id == null) return json(400, { ok: false, error: 'unsubscribe_invalid' });
+    const n = await doUnsubscribe(d.db, id, now());
+    if (n === 0) return json(404, { ok: false, error: 'not_found' });
+    return json(200, { ok: true, unsubscribed: true });
+  }
+
   /** Structured log line for waitlist paths. Only the wallet address, never contact details. */
   function logWaitlist(path: string, req: ApiRequest, u: URL, r: ApiResponse) {
     let address: string | undefined = u.searchParams.get('address') ?? undefined;
@@ -474,6 +487,7 @@ export function createApi(d: ApiDeps) {
       if (req.method === 'GET' && p === '/api/quotes/stats') return await quoteStats(u.searchParams);
       if (req.method === 'GET' && p === '/api/waitlist/nonce') return await nonce(u.searchParams.get('address'));
       if (req.method === 'POST' && p === '/api/waitlist') return await waitlist(req.body, normaliseSource(u.searchParams.get('source')));
+      if (req.method === 'GET' && p === '/api/waitlist/unsubscribe') return await unsubscribe(u.searchParams);
       if (req.method === 'POST' && p === '/api/waitlist/verify') return await verify(req.body);
       if (req.method === 'GET' && p === '/healthz') return json(200, { ok: true });
       return json(404, { error: 'not_found' });
