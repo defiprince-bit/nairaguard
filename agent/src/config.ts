@@ -18,10 +18,10 @@ export type NetworkAddresses = {
 export const ADDRESSES: Partial<Record<typeof NETWORK, NetworkAddresses>> = {
   'celo-sepolia': {
     chainId: 11142220,
-    vault: '0xA47F3e8b08a94D1933e2031416d54640A0BEF63B',
-    cngn: '0xfe37fbEA39ce656d7f8181e946E723b7b0D8cecB',
-    usdt: '0x65F5245b352EfE3ed15EdfE20efc8222107efC3c',
-    swapRouter: '0xa2859541D2d464e23ad0c07a944a96ad191E2eF2',
+    vault: '0xD436aA344C0E2a58a607443680651a2c32066be6',
+    cngn: '0xaA3B7364E418deC4Fb147f1BD2d95A4022082aEA',
+    usdt: '0xe123971ec3F56138766272B7b15Ee188fdD0eFf7',
+    swapRouter: '0xd834aB4e7caDc62f2E27ab6755ED4B22F0461e86',
   },
   // celo mainnet: TBD after mainnet deploy (Task 9)
 };
