@@ -1,3 +1,5 @@
+import { createPublicClient, http } from 'viem';
+import { celo, celoSepolia } from 'viem/chains';
 /**
  * Dashboard tx builders for the VaultFactory flow (design.md §7).
  * Every tx the user's wallet sends (createVault, approve, deposit) carries the ERC-8021
@@ -89,10 +91,15 @@ export function decodeVaultOf(result: Hex): `0x${string}` | null {
 
 type Eth = { request: (a: { method: string; params?: unknown[] }) => Promise<unknown> };
 
-/** One eth_call through the user's wallet: returns their vault, or null → onboarding. */
-export async function lookupVault(eth: Eth, factory: `0x${string}`, owner: `0x${string}`): Promise<`0x${string}` | null> {
-  const r = (await eth.request({ method: 'eth_call', params: [vaultOfCall(factory, owner), 'latest'] })) as Hex;
-  return decodeVaultOf(r);
+/**
+ * Reads vaultOf(owner) over the app's own public RPC for CHAIN, not the wallet's provider:
+ * MiniPay sits on Celo mainnet, so an eth_call through it to a Sepolia factory returns 0x.
+ */
+export async function lookupVault(factory: `0x${string}`, owner: `0x${string}`): Promise<`0x${string}` | null> {
+  const chain = process.env.NEXT_PUBLIC_NETWORK === 'celo' ? celo : celoSepolia;
+  const pc = createPublicClient({ chain, transport: http() });
+  const r = await pc.call(vaultOfCall(factory, owner));
+  return decodeVaultOf((r.data ?? '0x') as Hex);
 }
 
 /** Send a tagged tx from the connected wallet (MiniPay: legacy tx, no EIP-1559 fields needed). */
