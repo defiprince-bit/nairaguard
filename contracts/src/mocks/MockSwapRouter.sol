@@ -32,6 +32,7 @@ contract MockSwapRouter {
     /// @notice Accepts `tokenIn` already sent (or pulls remainder), pays `tokenOut` to caller.
     function swap(address tokenIn, address tokenOut, uint256 amountIn, uint256 minOut)
         external
+        virtual
         returns (uint256 amountOut)
     {
         if (amountIn == 0) revert ZeroAmount();

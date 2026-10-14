@@ -11,7 +11,7 @@ export const ATTRIBUTION_SUFFIX: Hex = toDataSuffix(ATTRIBUTION_TAG);
 
 export const ZERO = '0x0000000000000000000000000000000000000000' as const;
 /** Celo Sepolia VaultFactory; override with NEXT_PUBLIC_FACTORY_ADDRESS (required for mainnet). */
-export const SEPOLIA_FACTORY = '0x4fa967c761eD1ddB642Fe62Fcb9aB7B924Df5310' as const;
+export const SEPOLIA_FACTORY = '0xD6401dAc34b1D8BB9a617407f6bB84DeF9B03dcd' as const;
 export const FACTORY_ADDRESS = (process.env.NEXT_PUBLIC_FACTORY_ADDRESS ||
   (process.env.NEXT_PUBLIC_NETWORK === 'celo' ? '' : SEPOLIA_FACTORY)) as `0x${string}` | '';
 

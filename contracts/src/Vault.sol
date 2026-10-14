@@ -315,11 +315,13 @@ contract Vault {
         _rollDailyWindow();
         dailySpentUsd += usdValue;
 
+        // amountOut is what actually arrived (vault's tokenOut balance change), not the router's return value.
+        uint256 balBefore = IERC20(tokenOut).balanceOf(address(this));
         _push(tokenIn, router, amountIn);
-        amountOut = ISwapRouter(router).swap(tokenIn, tokenOut, amountIn, minOut);
+        ISwapRouter(router).swap(tokenIn, tokenOut, amountIn, minOut);
+        amountOut = IERC20(tokenOut).balanceOf(address(this)) - balBefore;
         if (amountOut < minOut) revert SlippageTooHigh();
 
-        // Router pays tokenOut to this vault.
         emit Swapped(id, tokenIn, tokenOut, amountIn, amountOut);
     }
 

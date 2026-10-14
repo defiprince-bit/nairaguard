@@ -121,6 +121,8 @@ export function createApi(d: ApiDeps) {
           id: String(a.id), kind: a.kind, reason: a.reason, txHash: a.tx_hash, status: a.status, at: iso(at),
           in: a.amount_in && rate ? money(sym(a.token_in), a.amount_in, rate, at) : undefined,
           out: outAmt && rate ? money(sym(a.token_out), outAmt, rate, at) : undefined,
+          // Actual tokenOut received (base units), from the vault's Swapped event. Null for legacy rows.
+          amountOut: outAmt ?? null,
           feeNgn: a.fee_ngn, pnlNgn: a.pnl_ngn,
         };
       }),
@@ -139,7 +141,7 @@ export function createApi(d: ApiDeps) {
           rate > 0 ? money(sym(t), amount, rate, a.created_at) : { token: sym(t), amount, amountNgn: null, amountUsd: null, rate: null, rateAt: null };
         return {
           id: a.onchain_id, reason: a.reason, expiresAt: iso(a.expires_at),
-          rate: rate > 0 ? String(rate) : null,
+          rateNgnPerUsd: rate > 0 ? String(rate) : null,
           rateNote: rate > 0 ? undefined : 'rate unavailable',
           in: token(a.token_in, a.amount_in),
           minOut: token(a.token_out, a.min_out),

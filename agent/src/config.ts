@@ -21,8 +21,8 @@ export type NetworkAddresses = {
 export const ADDRESSES: Partial<Record<typeof NETWORK, NetworkAddresses>> = {
   'celo-sepolia': {
     chainId: 11142220,
-    factory: (process.env.FACTORY_ADDRESS ?? '0x4fa967c761eD1ddB642Fe62Fcb9aB7B924Df5310') as `0x${string}`,
-    factoryStartBlock: BigInt(process.env.FACTORY_START_BLOCK ?? 38714846),
+    factory: (process.env.FACTORY_ADDRESS ?? '0xD6401dAc34b1D8BB9a617407f6bB84DeF9B03dcd') as `0x${string}`,
+    factoryStartBlock: BigInt(process.env.FACTORY_START_BLOCK ?? 38716050),
     cngn: '0xaA3B7364E418deC4Fb147f1BD2d95A4022082aEA',
     usdt: '0xe123971ec3F56138766272B7b15Ee188fdD0eFf7',
     swapRouter: '0xd834aB4e7caDc62f2E27ab6755ED4B22F0461e86',

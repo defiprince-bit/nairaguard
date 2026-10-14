@@ -7,6 +7,18 @@ import {VaultFactory} from "../src/VaultFactory.sol";
 import {MockERC20} from "../src/mocks/MockERC20.sol";
 import {MockSwapRouter} from "../src/mocks/MockSwapRouter.sol";
 
+/// @dev Router whose return value overstates what it pays (pays quote - 1%, returns quote).
+contract OverstatingRouter is MockSwapRouter {
+    function swap(address tokenIn, address tokenOut, uint256 amountIn, uint256)
+        external
+        override
+        returns (uint256 claimed)
+    {
+        claimed = quote(tokenIn, tokenOut, amountIn);
+        MockERC20(tokenOut).transfer(msg.sender, (claimed * 99) / 100);
+    }
+}
+
 contract VaultFactoryTest is Test {
     VaultFactory factory;
     Vault impl;
@@ -20,6 +32,7 @@ contract VaultFactoryTest is Test {
     address stranger = address(0xBAD);
 
     event VaultCreated(address indexed owner, address indexed vault);
+    event Swapped(uint256 indexed id, address tokenIn, address tokenOut, uint256 amountIn, uint256 amountOut);
 
     function setUp() public {
         cngn = new MockERC20("cNGN", "cNGN", 18);
@@ -146,6 +159,37 @@ contract VaultFactoryTest is Test {
         assertEq(factory.textileRouter(), address(other));
         factory.setRouter(address(other), false);
         assertEq(factory.textileRouter(), address(0));
+    }
+
+    function test_Swapped_AmountOutEqualsBalanceChange() public {
+        Vault v = _create(alice);
+        _fund(v, alice, 1_000e18);
+        uint256 before = usdt.balanceOf(address(v));
+        vm.expectEmit(true, false, false, true, address(v));
+        emit Swapped(0, address(cngn), address(usdt), 10e18, 10e18);
+        vm.prank(agent);
+        uint256 out = v.swap(address(cngn), address(usdt), 10e18, 9.9e18, 10e18);
+        assertEq(out, usdt.balanceOf(address(v)) - before);
+    }
+
+    function test_Swapped_UsesBalanceChangeNotRouterReturn() public {
+        OverstatingRouter r = new OverstatingRouter();
+        r.setRate(address(cngn), 1e18);
+        r.setRate(address(usdt), 1e18);
+        usdt.mint(address(r), 1_000e18);
+        factory.setRouter(address(r), true);
+        Vault v = _create(alice);
+        _fund(v, alice, 1_000e18);
+        uint256 before = usdt.balanceOf(address(v));
+        vm.recordLogs();
+        vm.prank(agent);
+        uint256 out = v.swap(address(cngn), address(usdt), 10e18, 9.9e18, 10e18);
+        uint256 delta = usdt.balanceOf(address(v)) - before;
+        assertEq(delta, 9.9e18);
+        assertEq(out, delta);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        (,,, uint256 emitted) = abi.decode(logs[logs.length - 1].data, (address, address, uint256, uint256));
+        assertEq(emitted, delta);
     }
 
     function test_SetRouter_OnlyOwner() public {

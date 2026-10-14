@@ -73,7 +73,8 @@ describe('Task 8a follow-ups', () => {
     await db.query(`INSERT INTO approvals (vault, onchain_id, token_in, token_out, amount_in, min_out, usd_value, reason, expires_at)
       VALUES ($1,'7',$2,$3,$4,'1','1','big','2026-10-15T00:00:00Z')`, [VAULT, CNGN, USDT, e18(90_000).toString()]);
     const item = ((await api().handle({ method: 'GET', url: `/api/vault/${VAULT}/approvals` })).body as any).items[0];
-    expect(item.rate).toBeNull();
+    expect(item.rateNgnPerUsd).toBeNull();
+    expect(item).not.toHaveProperty('rate');
     expect(item.rateNote).toBe('rate unavailable');
     expect(item.in).toMatchObject({ token: 'cNGN', amountNgn: null, amountUsd: null, rate: null });
   });
@@ -103,7 +104,7 @@ describe('read endpoints', () => {
       [VAULT, CNGN, USDT, e18(75_000).toString(), e18(49.5).toString(), e18(49.9).toString()]);
     const act = (await a.handle({ method: 'GET', url: `/api/vault/${VAULT}/activity` })).body as { items: any[] };
     // `out` is the actual amount received (49.9), not minOut (49.5).
-    expect(act.items[0]).toMatchObject({ kind: 'swap', in: { token: 'cNGN', amountUsd: '50.00' }, out: { token: 'USDT', amountUsd: '49.90' } });
+    expect(act.items[0]).toMatchObject({ kind: 'swap', in: { token: 'cNGN', amountUsd: '50.00' }, out: { token: 'USDT', amountUsd: '49.90' }, amountOut: e18(49.9).toString() });
     await db.query(`INSERT INTO approvals (vault, onchain_id, token_in, token_out, amount_in, min_out, usd_value, reason, expires_at)
       VALUES ($1,'1',$2,$3,'1','1','1','big','2026-10-15T00:00:00Z')`, [VAULT, CNGN, USDT]);
     expect(((await a.handle({ method: 'GET', url: `/api/vault/${v}/approvals` })).body as any).items).toHaveLength(1);
