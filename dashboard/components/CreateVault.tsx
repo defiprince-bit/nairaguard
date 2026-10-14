@@ -35,7 +35,7 @@ export function CreateVaultStep({
     setError(null);
     try {
       await sendAndWait(eth, owner, buildCreateVault(factory, presetLimits(preset, target)));
-      const v = await lookupVault(eth, factory, owner);
+      const v = await lookupVault(factory, owner);
       if (!v) throw new Error('Vault not found after creation.');
       onCreated(v);
     } catch (e) {

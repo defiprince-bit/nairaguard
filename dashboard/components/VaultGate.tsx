@@ -14,8 +14,8 @@ export function VaultGate({ owner, children }: { owner: string; children: (vault
   const factory = FACTORY_ADDRESS;
 
   useEffect(() => {
-    if (!factory || !window.ethereum) return;
-    lookupVault(window.ethereum, factory, owner as `0x${string}`)
+    if (!factory) return;
+    lookupVault(factory, owner as `0x${string}`)
       .then(setVault)
       .catch(() => setError('Could not look up your vault. Check your connection and try again.'));
   }, [factory, owner]);
