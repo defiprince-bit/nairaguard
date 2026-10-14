@@ -115,6 +115,20 @@ Writes (approve, set limits, deposit, withdraw) are **signed by the user's walle
   - **source allowlist:** `x`, `celo-ng`, `celo-africa-dao`, `minipay`, `whatsapp-freelancers`, `referral`. Anything else, or missing, stores as `direct`.
   - **verified:** the client must never send a verified flag. Store the address plus whether it came from MiniPay. Real verification is Task 5: the user signs a short message in MiniPay and the server recovers the signer; only then set `verified = true`. Only verified addresses count toward the independent-user check (active on Celo before 6 Oct). Never put signups in seeds or logs.
 
+### Independent-user count
+`agent/scripts/count-independent.ts` counts verified waitlist wallets that are independent. It drops a wallet when:
+1. it is in `excluded_wallets` (`reason`: `team`, `test`, `funded_by_us`);
+2. it ever received CELO or tokens (normal, token or internal transfers) from the deployer, the agent, or any `team` wallet;
+3. its first Celo mainnet activity is on/after 2026-10-06, or it has none.
+Data comes read-only from `celo.blockscout.com/api` (Etherscan-compatible). Output: a table plus JSON (totals, `byReason`, and each dropped address with its reason). No contacts are printed.
+
+```bash
+cd agent && DATABASE_URL=… pnpm tsx scripts/count-independent.ts [--json]
+# add an excluded wallet (then counts):
+DATABASE_URL=… pnpm tsx scripts/count-independent.ts --exclude 0xabc… --reason funded_by_us --note "airdropped gas"
+```
+Or in SQL: `INSERT INTO excluded_wallets (address, reason, note) VALUES (lower('0xABC…'), 'test', 'why') ON CONFLICT (address) DO NOTHING;`
+
 ## 5. MiniPay
 - Connect via the injected provider; the wallet address is the identity. No separate login.
 - Fees paid in stablecoin (fee currency) so users don't need CELO. **TBD**: confirm MiniPay's current requirements before Task 6.
