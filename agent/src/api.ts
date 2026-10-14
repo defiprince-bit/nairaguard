@@ -220,7 +220,32 @@ export function createApi(d: ApiDeps) {
     return json(200, { ok: true, verified: true });
   }
 
+  /** Structured log line for waitlist paths. Only the wallet address, never contact details. */
+  function logWaitlist(path: string, req: ApiRequest, u: URL, r: ApiResponse) {
+    let address: string | undefined = u.searchParams.get('address') ?? undefined;
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    if (!address && typeof b.message === 'string') {
+      try { address = parseSiweMessage(b.message).address; } catch { /* unparsable */ }
+    }
+    if (!address && typeof b.wallet === 'string') address = b.wallet;
+    const body = (r.body ?? {}) as { error?: string };
+    console.log(JSON.stringify({
+      evt: 'waitlist', path, status: r.status, error: body.error ?? null,
+      address: address?.toLowerCase() ?? null, source: path === '/api/waitlist' ? u.searchParams.get('source') ?? null : undefined,
+      hasSignature: path.endsWith('/verify') ? typeof b.signature === 'string' : undefined,
+      at: now().toISOString(),
+    }));
+  }
+
   async function handle(req: ApiRequest): Promise<ApiResponse> {
+    const r = await route(req);
+    const u = new URL(req.url, 'http://x');
+    const p = u.pathname.replace(/\/+$/, '');
+    if (p.startsWith('/api/waitlist')) logWaitlist(p, req, u, r);
+    return r;
+  }
+
+  async function route(req: ApiRequest): Promise<ApiResponse> {
     const u = new URL(req.url, 'http://x');
     const p = u.pathname.replace(/\/+$/, '');
     const m = p.match(/^\/api\/vault\/(0x[0-9a-fA-F]{40})\/(balances|activity|approvals|limits)$/);

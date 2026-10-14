@@ -45,6 +45,7 @@ export function WaitlistForm() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [signupToken, setSignupToken] = useState<string | null>(null);
+  const [verifyCode, setVerifyCode] = useState<string | null>(null);
   const [verifyState, setVerifyState] = useState<'idle' | 'signing' | 'verified' | 'skipped' | 'failed'>('idle');
 
   useEffect(() => {
@@ -111,22 +112,47 @@ export function WaitlistForm() {
     const eth = typeof window !== 'undefined' ? window.ethereum : undefined;
     if (!eth || !wallet || !signupToken) return;
     setVerifyState('signing');
+    setVerifyCode(null);
+    const fail = (code: string) => {
+      setVerifyCode(code);
+      setVerifyState('failed');
+    };
+    // 1) nonce
+    let message: string | undefined;
     try {
-      const n = await fetch(`/api/waitlist/nonce?address=${wallet}`, { cache: 'no-store' });
-      const { message } = (await n.json()) as { message?: string };
-      if (!n.ok || !message) throw new Error('nonce');
-      const signature = (await eth.request({ method: 'personal_sign', params: [message, wallet] })) as string;
+      const n = await fetch(`/api/waitlist/nonce?address=${encodeURIComponent(wallet)}`, { cache: 'no-store' });
+      const nd = (await n.json().catch(() => ({}))) as { message?: string; error?: string };
+      message = nd.message;
+      if (!n.ok || !message) return fail(`nonce_${nd.error ?? n.status}`);
+    } catch {
+      return fail('nonce_network');
+    }
+    // 2) sign (MiniPay may not support personal_sign; surface the provider code)
+    let signature: string;
+    try {
+      signature = (await eth.request({ method: 'personal_sign', params: [message, wallet] })) as string;
+    } catch (e) {
+      const err = e as { code?: number; name?: string; message?: string };
+      if (err.code === 4001 || err.name === 'UserRejectedRequestError') {
+        setVerifyState('skipped');
+        return;
+      }
+      const unsupported = err.code === 4200 || err.code === -32601 || /not (currently )?supported|unsupported/i.test(err.message ?? '');
+      return fail(unsupported ? `sign_unsupported_${err.code ?? 'x'}` : `sign_${err.code ?? err.name ?? 'error'}`);
+    }
+    if (typeof signature !== 'string' || !signature.startsWith('0x')) return fail('sign_empty');
+    // 3) verify
+    try {
       const v = await fetch('/api/waitlist/verify', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ signupToken, message, signature }),
       });
-      const vd = (await v.json()) as { ok?: boolean };
-      setVerifyState(v.ok && vd.ok ? 'verified' : 'failed');
-    } catch (e) {
-      // User rejected the signature (EIP-1193 code 4001) or the API is unavailable.
-      const code = (e as { code?: number }).code;
-      setVerifyState(code === 4001 ? 'skipped' : 'failed');
+      const vd = (await v.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (v.ok && vd.ok) setVerifyState('verified');
+      else fail(`verify_${vd.error ?? v.status}`);
+    } catch {
+      fail('verify_network');
     }
   }
 
@@ -184,6 +210,11 @@ export function WaitlistForm() {
             {verifyState === 'failed' ? (
               <p className="small" style={{ margin: 0, color: 'var(--danger)' }}>
                 Couldn&apos;t confirm right now. You&apos;re still on the list. Try again in a moment.
+              </p>
+            ) : null}
+            {verifyState === 'failed' && verifyCode ? (
+              <p className="small" style={{ margin: 0, fontSize: 11, color: 'var(--ink-muted)', fontFamily: 'monospace' }}>
+                Error code: {verifyCode}
               </p>
             ) : null}
           </div>
