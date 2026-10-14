@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="NairaGuard">
+  <defs>
+    <linearGradient id="ng-bg" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#0E7A4F"/>
+      <stop offset="1" stop-color="#1FA36A"/>
+    </linearGradient>
+    <!-- ₦ cut-out: two stems, one diagonal, two bars -->
+    <mask id="ng-naira">
+      <rect width="512" height="512" fill="#fff"/>
+      <g fill="#000">
+        <rect x="206" y="168" width="36" height="156"/>
+        <rect x="300" y="168" width="36" height="156"/>
+        <polygon points="206,168 248,168 336,324 294,324"/>
+        <rect x="176" y="210" width="190" height="18"/>
+        <rect x="176" y="254" width="190" height="18"/>
+      </g>
+    </mask>
+  </defs>
+  <rect width="512" height="512" fill="url(#ng-bg)"/>
+  <path fill="#fff" mask="url(#ng-naira)" d="M152 104h208a24 24 0 0 1 24 24v148c0 66-54 110-128 148C182 386 128 342 128 276V128a24 24 0 0 1 24-24Z"/>
+</svg>
