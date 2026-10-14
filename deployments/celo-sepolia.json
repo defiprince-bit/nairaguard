@@ -1,0 +1,15 @@
+{
+  "network": "celo-sepolia",
+  "chainId": 11142220,
+  "deployedAt": "2026-10-14T14:53:47Z",
+  "deployRun": "https://github.com/defiprince-bit/nairaguard/actions/runs/38584553176",
+  "commit": "7ad8ebc",
+  "owner": "0x1ab29BDaAc75255501ADBBdcC2150fe4D346C0A7",
+  "agent": "0xA2A173A481BC063fEE0EF11c67Fc756DC5f928f4",
+  "contracts": {
+    "Vault": "0xA47F3e8b08a94D1933e2031416d54640A0BEF63B",
+    "MockCNGN": "0xfe37fbEA39ce656d7f8181e946E723b7b0D8cecB",
+    "MockUSDT": "0x65F5245b352EfE3ed15EdfE20efc8222107efC3c",
+    "MockSwapRouter": "0xa2859541D2d464e23ad0c07a944a96ad191E2eF2"
+  }
+}
