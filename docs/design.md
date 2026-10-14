@@ -145,6 +145,46 @@ Source: [Celo ERC-8004 docs](https://docs.celo.org/build/agents/8004).
 - `agentURI` = `https://<dashboard>/.well-known/agent.json` with `type`, `name`, `description`, `image`, `endpoints` (dashboard URL, `wallet` with chainId 42220). Card must be live before registering.
 - Show the identity on the dashboard via `/api/agent`.
 
+## 7. VaultFactory (Task 8a, before mainnet)
+
+**Why:** the single-owner vault serves one user. Mainnet needs many independent users, each with their own funds. Each user gets **their own vault**: only they can withdraw, and the agent can only trade within their limits.
+
+### Contracts
+`contracts/src/VaultFactory.sol` (Ownable2Step) deploys **EIP-1167 clones** of `Vault` (OpenZeppelin `Clones`). One vault per owner.
+
+Factory state
+- `address public immutable implementation` (Vault logic)
+- `address public agent` (default agent for new vaults)
+- `address public cNGN`, `address public usdt`
+- `mapping(address router => bool) public isRouter` (Textile allowlist, set by factory owner)
+- `mapping(address owner => address vault) public vaultOf`
+- `address[] public allVaults` + `vaultCount()`
+
+Factory functions
+- `createVault(Limits calldata limits) returns (address vault)`: reverts `VaultExists` if `vaultOf[msg.sender] != 0`. Clones, calls `initialize(msg.sender, agent, cNGN, usdt, limits)`, stores `vaultOf`, pushes `allVaults`, emits `VaultCreated(owner, vault)`. Called from MiniPay, **tagged** with `celo_9efd0f97b491`.
+- `setAgent(address)`, `setRouter(address, bool)` (factory owner). `setAgent` only affects **new** vaults.
+- Factory ownership: deployer key at deploy, then `transferOwnership` to the owner's wallet before launch, same as the vault.
+
+Vault changes
+- Replace the constructor with `initialize(owner, agent, tokenA, tokenB, limits)` (callable once; implementation locked with `_disableInitializers`-style guard in its constructor). `owner` is the **user**, not `msg.sender`.
+- Add `address public factory`. Router check becomes `IVaultFactory(factory).isRouter(router)` so Textile addresses are managed once in the factory, not by every user. Remove `setSwapRouter` from the vault.
+- Keep: owner-only `deposit`/`withdraw`/`setLimits`/`setAgent`/`pause`, withdraw works while paused, Ownable2Step. A user can always revoke the agent with `setAgent(address(0))`-style disable or `pause()`.
+- `deposit` from the user's wallet is **tagged**.
+
+Tests (forge): one vault per owner, `VaultExists` revert, `initialize` cannot be called twice or on the implementation, owner is the caller, router allowlist read from factory, user can withdraw while paused, agent of one vault cannot touch another, factory `setAgent` doesn't change existing vaults, all existing Vault tests pass against a clone.
+
+### Agent
+- Rebuild the vault list from `VaultCreated` logs; store `last_scanned_block` in Postgres so restarts resume.
+- Loop runs the strategy **per vault** with that vault's limits and target; activity rows keyed by vault.
+
+### API and dashboard
+- Dashboard finds a user's vault via `factory.vaultOf(address)` (one call). `0x0` means show onboarding: connect, "Create my vault" (preset + target), then deposit.
+- Replace `NEXT_PUBLIC_VAULT_ADDRESS` with `NEXT_PUBLIC_FACTORY_ADDRESS`.
+
+### Verification and counting
+- A waitlist wallet becomes `verified` when it calls `createVault` or makes its first deposit from its own address (both tagged, both on-chain proof of ownership). MiniPay can't sign messages, so this replaces SIWE inside MiniPay.
+- The independent-user count keys off **vault owners**, then applies the existing exclusions (team/test list, funded by us directly or via one in-between wallet, no mainnet activity before 6 Oct 00:00 WAT).
+
 ## Build order (one Cursor task at a time)
 1. **Vault + tests.** Implement section 1 with a mock Textile router. Done when `forge test` covers: deposit/withdraw, every limit revert, router allowlist, propose/approve/expiry, pause. Deploy to Celo Sepolia.
 2. **Tx builder.** `agent/src/txBuilder.ts` appends `ATTRIBUTION_TAG`. Done when a test proves every built tx carries it.
@@ -154,4 +194,5 @@ Source: [Celo ERC-8004 docs](https://docs.celo.org/build/agents/8004).
 6. **Dashboard wiring** to the API following `docs/ui-spec.md`, MiniPay connect.
 7. **Loss-example script**: compute the real ₦ loss on ₦500,000 over last month from rate data for the waitlist page.
 8. **Textile integration**: swap mock router for real Textile once addresses are confirmed.
+8a. **VaultFactory** per section 7, with tests. Redeploy on Sepolia and point the agent and dashboard at the factory.
 9. **Mainnet**: deploy vault (owner approval), fund agent, register ERC-8004, first tagged trades. Target 28 Oct.
