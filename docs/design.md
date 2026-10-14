@@ -100,6 +100,8 @@ POST /api/waitlist/verify          { signupToken, message, signature } -> { ok: 
 `balances` also returns `pnlNgn`, `pnlUsd` (strings, 2dp) and `pnlSince` (ISO date the vault was first seen funded, or null).
 P&L = vault value now in ₦ − starting balances valued at the current rate (no trading). Real balances are used, so swap fees/slippage are already netted. Every agent tick logs a row in `quotes`; each confirmed swap also gets `fee_ngn` (value change across the swap at one rate) and `pnl_ngn` on its `activity` row.
 
+Waitlist SIWE uses `WAITLIST_CHAIN_ID` (default 42220, Celo mainnet), separate from the agent's `NETWORK`; signatures are verified with a read-only Celo mainnet client (https://forno.celo.org, override `WAITLIST_RPC_URL`) so smart-wallet / EIP-1271 checks work. Domain comes from `DASHBOARD_URL`.
+
 Waitlist verification: users can join without signing (`verified = false`). To verify, the client fetches a nonce, the wallet signs the SIWE message (domain = dashboard host, chain id, nonce, expiry), and `/verify` checks it with `viem/siwe` `verifySiweMessage`, consumes the nonce once (replays and expired messages are rejected), then sets `verified = true` and stores the recovered address.
 
 `signupToken` is 32 crypto-random bytes (hex), returned only once by `POST /api/waitlist`; the server stores only its sha256 (`signup_token_hash`). `/verify` finds the signup by that hash (never by a client-supplied id) and only updates it if `wallet_address` is null or already equals the signer (case-insensitive), otherwise `409 wallet_mismatch`. The client must keep the token from the join response and send it to `/verify`.

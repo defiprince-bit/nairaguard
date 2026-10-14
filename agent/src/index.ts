@@ -2,7 +2,7 @@ import { createPublicClient, http } from 'viem';
 import { celo, celoSepolia } from 'viem/chains';
 import { createApi, serve } from './api.js';
 import { createChainPort } from './chain.js';
-import { ADDRESSES, ATTRIBUTION_TAG, NETWORK, RPC_URL } from './config.js';
+import { ADDRESSES, ATTRIBUTION_TAG, NETWORK, RPC_URL, WAITLIST_CHAIN_ID, WAITLIST_RPC_URL } from './config.js';
 import { connect, migrate } from './db.js';
 import { runOnce } from './loop.js';
 import { MockRouterRateSource } from './textile.js';
@@ -36,6 +36,11 @@ async function main(): Promise<void> {
 
   const apiPort = Number(process.env.PORT ?? 8080);
   const dashboardUrl = process.env.DASHBOARD_URL ?? 'https://nairaguard-vert.vercel.app';
+  // Read-only client for SIWE checks on the waitlist chain (default Celo mainnet). Never sends txs.
+  const siweClient = createPublicClient({
+    chain: WAITLIST_CHAIN_ID === 42220 ? celo : celoSepolia,
+    transport: http(WAITLIST_RPC_URL),
+  });
   const api = createApi({
     db,
     agentAddress: port.address,
@@ -45,7 +50,7 @@ async function main(): Promise<void> {
       if (v.toLowerCase() !== addrs.vault.toLowerCase()) throw new Error('unknown vault');
       return port.readState();
     },
-    siwe: { domain: new URL(dashboardUrl).host, uri: dashboardUrl, chainId: addrs.chainId, client: publicClient as never },
+    siwe: { domain: new URL(dashboardUrl).host, uri: dashboardUrl, chainId: WAITLIST_CHAIN_ID, client: siweClient as never },
   });
   if (!ONCE) serve(api, apiPort, dashboardUrl);
 
