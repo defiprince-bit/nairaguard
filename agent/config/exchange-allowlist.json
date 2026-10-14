@@ -1,0 +1,4 @@
+{
+  "_comment": "Known exchange / on-ramp hot wallets on Celo mainnet. Never treated as one-hop intermediaries (they pay out to many unrelated users). Add only addresses verified via a Blockscout label (celo.blockscout.com) or the exchange's own docs, lowercase, with the source. Left empty for now: no labels verified yet.",
+  "wallets": []
+}

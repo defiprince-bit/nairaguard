@@ -119,7 +119,10 @@ Writes (approve, set limits, deposit, withdraw) are **signed by the user's walle
 `agent/scripts/count-independent.ts` counts verified waitlist wallets that are independent. It drops a wallet when:
 1. it is in `excluded_wallets` (`reason`: `team`, `test`, `funded_by_us`);
 2. it ever received CELO or tokens (normal, token or internal transfers) from the deployer, the agent, or any `team` wallet;
-3. its first Celo mainnet activity is on/after 2026-10-06, or it has none.
+3. it received funds from a wallet that itself was directly funded by the deployer, agent or a `team` wallet (one hop). These are flagged `funded_indirect`, listed separately for **manual review**, and not counted. Guards: a wallet is an intermediary only if it paid out to ≤ 20 distinct addresses (`--max-fanout` / `MAX_FANOUT`), and never if it is in `agent/config/exchange-allowlist.json` (known exchange / on-ramp hot wallets, verified via Blockscout labels; currently empty). The output lists every intermediary used with its payee count;
+4. its first Celo mainnet activity is on/after the cutoff, or it has none. Cutoff defaults to `2026-10-05T23:00:00Z` (6 Oct 00:00 WAT); override with `--cutoff <ISO>` or `INDEPENDENT_CUTOFF`.
+
+Blockscout calls are cached per address and list for the run, and pagination is capped at `BLOCKSCOUT_MAX_PAGES` (default 5 × 1000 rows per list). Very busy wallets may be truncated past that cap.
 Data comes read-only from `celo.blockscout.com/api` (Etherscan-compatible). Output: a table plus JSON (totals, `byReason`, and each dropped address with its reason). No contacts are printed.
 
 ```bash
