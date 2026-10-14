@@ -270,7 +270,7 @@ async function rfqSwap(
     rate: String(qRate), reason: q.reason, txHash: r.hash, status: 'confirmed',
     venue: venue || null, venueTarget: ev?.target ?? null,
   });
-  if (q.approvalId) await markExecuted(d.db, d.vault, q.approvalId.toString(), r.hash, now);
+  if (q.approvalId) await markExecuted(d.db, d.vault, q.approvalId.toString(), r.hash, now, ev && { amountIn: ev.amountIn, amountOut: ev.amountOut });
 
   // Per-swap P&L: value change across the swap at the same rate (fees + slippage).
   const fee = valueNgn(after.ngnBalance, after.usdBalance, rate, dec) - valueNgn(s.ngnBalance, s.usdBalance, rate, dec);
@@ -282,12 +282,12 @@ async function rfqSwap(
 }
 
 /** The vault's own Swapped event in a receipt (ignores logs from other contracts). */
-export function swappedEvent(logs: Log[], vault: string): { amountOut: bigint; target: `0x${string}` } | undefined {
+export function swappedEvent(logs: Log[], vault: string): { amountIn: bigint; amountOut: bigint; target: `0x${string}` } | undefined {
   for (const log of logs) {
     if (log.address && log.address.toLowerCase() !== vault.toLowerCase()) continue;
     try {
       const ev = decodeEventLog({ abi: vaultAbi, data: log.data, topics: log.topics });
-      if (ev.eventName === 'Swapped') return { amountOut: ev.args.amountOut, target: ev.args.target };
+      if (ev.eventName === 'Swapped') return { amountIn: ev.args.amountIn, amountOut: ev.args.amountOut, target: ev.args.target };
     } catch {
       /* not a vault event */
     }

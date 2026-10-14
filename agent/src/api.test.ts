@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createPublicClient, custom, parseUnits } from 'viem';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { createSiweMessage } from 'viem/siwe';
-import { createApi, hashToken, normaliseSource } from './api.js';
-import { type Db, migrate } from './db.js';
+import { createApi, fillRate, hashToken, normaliseSource } from './api.js';
+import { type Db, insertRfqQuote, markApproved, markExecuted, migrate, type RfqOutcome } from './db.js';
 import type { VaultState } from './loop.js';
 import { computePnl, logQuote } from './pnl.js';
 
@@ -357,5 +357,89 @@ describe('Task 8b API', () => {
     const since = (await api().handle({ method: 'GET', url: '/api/quotes/stats?since=2026-10-13T00:00:00Z' })).body as any;
     expect(since.requested).toBe(3);
     expect((await api().handle({ method: 'GET', url: '/api/quotes/stats?since=nope' })).status).toBe(400);
+  });
+});
+
+describe('activity outcomes + executed fills', () => {
+  const t = (min: number) => new Date(Date.parse('2026-10-14T10:00:00Z') + min * 60_000);
+  const check = (min: number, outcome: RfqOutcome, approvalId?: string) => insertRfqQuote(db, {
+    vault: VAULT, venue: 'textile', side: 'ngnToUsd', tokenIn: CNGN, tokenOut: USDT, sellAmount: '1', quoted: outcome !== 'no_quote',
+    outcome, outcomeReason: outcome, approvalId, requestedAt: t(min),
+  });
+  const trade = (min: number) => db.query(
+    `INSERT INTO activity (vault, kind, reason, status, created_at) VALUES ($1,'swap','r','confirmed',$2)`, [VAULT, t(min).toISOString()]);
+  const all = async (limit: number) => {
+    const out: any[] = []; let cursor: string | null = null;
+    do {
+      const body: any = (await api().handle({ method: 'GET', url: `/api/vault/${VAULT}/activity?limit=${limit}${cursor ? `&cursor=${cursor}` : ''}` })).body;
+      out.push(...body.items); cursor = body.nextCursor;
+    } while (cursor);
+    return out;
+  };
+
+  it('merges no-trade checks with trades, collapses consecutive identical outcomes, pins approved price_moved', async () => {
+    await check(0, 'no_quote'); await check(1, 'no_quote'); await check(2, 'no_quote');
+    await trade(3);
+    await check(4, 'no_quote');
+    await check(5, 'price_moved'); await check(6, 'price_moved');
+    await check(7, 'price_moved', '9'); await check(8, 'price_moved', '9');
+    await check(9, 'expired');
+    const items = await all(100);
+    expect(items.map((i) => [i.outcome, i.count ?? null])).toEqual([
+      ['expired', 1], ['price_moved', 1], ['price_moved', 1], ['price_moved', 2], ['no_quote', 1], ['filled', null], ['no_quote', 3],
+    ]);
+    const run = items[6];
+    expect(run).toMatchObject({ kind: 'check', createdAt: t(0).toISOString(), firstAt: t(0).toISOString(), lastAt: t(2).toISOString() });
+    expect(items[1]).toMatchObject({ approvalId: '9', firstAt: t(8).toISOString(), lastAt: t(8).toISOString() });
+    // Paging with every page size returns the same items, no dupes or gaps.
+    for (const n of [1, 2, 3]) expect((await all(n)).map((i) => i.id)).toEqual(items.map((i) => i.id));
+  });
+
+  it('cursor stays stable when a collapsed run grows', async () => {
+    await check(0, 'no_quote'); await trade(1); await check(2, 'no_quote'); await check(3, 'no_quote');
+    const p1: any = (await api().handle({ method: 'GET', url: `/api/vault/${VAULT}/activity?limit=1` })).body;
+    expect(p1.items[0]).toMatchObject({ outcome: 'no_quote', count: 2 });
+    await check(4, 'no_quote');
+    const p2: any = (await api().handle({ method: 'GET', url: `/api/vault/${VAULT}/activity?limit=5&cursor=${p1.nextCursor}` })).body;
+    expect(p2.items.map((i: any) => i.outcome)).toEqual(['filled', 'no_quote']);
+    const head: any = (await api().handle({ method: 'GET', url: `/api/vault/${VAULT}/activity?limit=1` })).body;
+    expect(head.items[0]).toMatchObject({ id: p1.items[0].id, count: 3, lastAt: t(4).toISOString() });
+  });
+
+  it('status exposes lastOutcome and lastOutcomeAt', async () => {
+    let s: any = (await api().handle({ method: 'GET', url: `/api/vault/${VAULT}/status` })).body;
+    expect(s).toMatchObject({ lastOutcome: null, lastOutcomeAt: null });
+    await check(0, 'no_quote'); await check(5, 'price_moved');
+    s = (await api().handle({ method: 'GET', url: `/api/vault/${VAULT}/status` })).body;
+    expect(s).toMatchObject({ lastOutcome: 'price_moved', lastOutcomeAt: t(5).toISOString() });
+  });
+
+  it('executed approvals carry fillRateNgnPerUsd + amountOut from the Swapped amounts; null otherwise', async () => {
+    const ins = (id: string, tin: string, tout: string) => db.query(
+      `INSERT INTO approvals (vault, onchain_id, token_in, token_out, amount_in, min_out, usd_value, reason, expires_at)
+       VALUES ($1,$2,$3,$4,'1','1','1','r','2026-10-15T00:00:00Z')`, [VAULT, id, tin, tout]);
+    await ins('1', CNGN, USDT); await ins('2', USDT, CNGN); await ins('3', CNGN, USDT);
+    for (const id of ['1', '2']) await markApproved(db, VAULT, id, t(60), t(0));
+    await markExecuted(db, VAULT, '1', '0xa', t(1), { amountIn: e18(136_200), amountOut: e18(100) });
+    await markExecuted(db, VAULT, '2', '0xb', t(1), { amountIn: e18(50), amountOut: e18(68_000) });
+    const items: any[] = ((await api().handle({ method: 'GET', url: `/api/vault/${VAULT}/approvals` })).body as any).items;
+    const by = (id: string) => items.find((i) => i.id === id);
+    expect(by('1')).toMatchObject({ status: 'executed', fillRateNgnPerUsd: '1362.00', amountOut: e18(100).toString() });
+    expect(by('2')).toMatchObject({ status: 'executed', fillRateNgnPerUsd: '1360.00', amountOut: e18(68_000).toString() });
+    expect(by('3')).toMatchObject({ fillRateNgnPerUsd: null, amountOut: null });
+  });
+
+  it('fillRate is normalised by decimals and always agrees with amountOut', () => {
+    const dec = { cngn: 6, usdt: 6 };
+    for (const [ngnIn, aIn, aOut] of [[true, 1_362_000_000n, 1_000_000n], [false, 2_500_000n, 3_400_000_000n], [true, 999_999n, 733n]] as const) {
+      const r = Number(fillRate(ngnIn, aIn, aOut, dec));
+      const usd = Number(ngnIn ? aOut : aIn) / 1e6; const ngn = Number(ngnIn ? aIn : aOut) / 1e6;
+      expect(r).toBeCloseTo(ngn / usd, 2);
+      // amountOut implied by rate matches the reported amountOut (to rounding of 2dp rate).
+      const implied = ngnIn ? (Number(aIn) / 1e6) / r : (Number(aIn) / 1e6) * r;
+      expect(Math.abs(implied - Number(aOut) / 1e6) / (Number(aOut) / 1e6)).toBeLessThan(1e-3);
+    }
+    expect(fillRate(true, e18(1362), 1_000_000n, { cngn: 18, usdt: 6 })).toBe('1362.00');
+    expect(fillRate(true, 1n, 0n, dec)).toBeNull();
   });
 });

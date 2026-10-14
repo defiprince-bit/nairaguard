@@ -150,11 +150,14 @@ export async function markApproved(db: Db, vault: string, onchainId: string, win
   return r.rows.length > 0;
 }
 
-export async function markExecuted(db: Db, vault: string, onchainId: string, txHash: string, at: Date): Promise<void> {
+/** fill: amountIn/amountOut from the vault's Swapped event; omitted when the event wasn't found (fields stay null). */
+export async function markExecuted(
+  db: Db, vault: string, onchainId: string, txHash: string, at: Date, fill?: { amountIn: bigint; amountOut: bigint },
+): Promise<void> {
   await db.query(
-    `UPDATE approvals SET status='executed', executed_tx=$3, executed_at=$4
+    `UPDATE approvals SET status='executed', executed_tx=$3, executed_at=$4, executed_amount_in=$5, executed_amount_out=$6
      WHERE lower(vault)=lower($1) AND onchain_id=$2 AND status='approved'`,
-    [vault, onchainId, txHash, at.toISOString()]);
+    [vault, onchainId, txHash, at.toISOString(), fill?.amountIn.toString() ?? null, fill?.amountOut.toString() ?? null]);
 }
 
 /** Oldest approved proposal whose window is still open. */

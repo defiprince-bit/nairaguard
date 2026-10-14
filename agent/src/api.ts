@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { createHash, randomBytes } from 'node:crypto';
 import { type Client, formatUnits, isAddress } from 'viem';
 import { createSiweMessage, parseSiweMessage, verifySiweMessage } from 'viem/siwe';
-import type { Db } from './db.js';
+import type { Db, RfqOutcome } from './db.js';
 import type { FeedReading } from './feed.js';
 import type { VaultState } from './loop.js';
 import { computePnl, getBaseline } from './pnl.js';
@@ -48,6 +48,19 @@ function money(token: 'cNGN' | 'USDT', amount: string, rate: number, rateAt: Dat
 }
 
 const iso = (d: Date | string) => new Date(d).toISOString();
+
+/**
+ * Actual fill rate (cNGN per 1 USD₮) from the Swapped event's amountIn/amountOut, normalised by decimals,
+ * whichever direction the trade went. Null when either amount is zero.
+ */
+export function fillRate(
+  ngnIsIn: boolean, amountIn: bigint, amountOut: bigint, dec: { cngn: number; usdt: number },
+): string | null {
+  const ngn = ngnIsIn ? amountIn : amountOut;
+  const usd = ngnIsIn ? amountOut : amountIn;
+  if (ngn <= 0n || usd <= 0n) return null;
+  return (Number(formatUnits(ngn, dec.cngn)) / Number(formatUnits(usd, dec.usdt))).toFixed(2);
+}
 const json = (status: number, body: unknown): ApiResponse => ({ status, body });
 
 export function createApi(d: ApiDeps) {
@@ -116,6 +129,9 @@ export function createApi(d: ApiDeps) {
     const feed = d.readFeed ? await d.readFeed().catch(() => undefined) : undefined;
     const st = d.readState ? await d.readState(vault as `0x${string}`).catch(() => undefined) : undefined;
     // paused: "owner" when the owner paused, "stale_price" when the reference rate is too old (vault reverts StalePrice).
+    const lo = await d.db.query<{ outcome: string; requested_at: string }>(
+      'SELECT outcome, requested_at FROM textile_quotes WHERE lower(vault)=$1 ORDER BY requested_at DESC, id DESC LIMIT 1', [vault]);
+    const lastQ = lo.rows[0];
     const paused = st?.paused ? 'owner' : feed && feed.stale ? 'stale_price' : null;
     return json(200, {
       vault, lastCheckedAt: last ? iso(last.ran_at) : null, ok: last ? last.ok : null,
@@ -123,42 +139,94 @@ export function createApi(d: ApiDeps) {
       feedRate: feed?.rateNgnPerUsd != null ? feed.rateNgnPerUsd.toFixed(2) : null,
       feedUpdatedAt: feed ? iso(feed.updatedAt) : null,
       paused,
+      lastOutcome: (lastQ?.outcome ?? null) as RfqOutcome | null,
+      lastOutcomeAt: lastQ ? iso(lastQ.requested_at) : null,
     });
   }
 
-  /** Keyset paging on (created_at, id), newest first. Cursor = base64url(JSON [created_at text, id]). */
+  /**
+   * Keyset paging, newest first, over two sources: activity rows (src 'a') and no-trade RFQ checks from
+   * textile_quotes (src 'q'; quotes that sent a tx already have an activity row). Consecutive identical
+   * no-trade outcomes collapse into one item keyed by its first occurrence, so the key never changes as the
+   * run grows; price_moved on an approved trade (approval_id set) always stays its own row.
+   * Cursor = base64url(JSON [firstAt text, id, src]); legacy [createdAt, id] cursors are read as src 'a'.
+   */
   async function activity(vault: string, q?: URLSearchParams) {
     const limit = Math.min(Math.max(Number(q?.get('limit') ?? 50) || 50, 1), 100);
-    let after: [string, string] | null = null;
+    let after: [string, string, string] | null = null;
     const c = q?.get('cursor');
     if (c) {
       try {
         const v = JSON.parse(Buffer.from(c, 'base64url').toString('utf8'));
         if (!Array.isArray(v) || typeof v[0] !== 'string' || !/^\d+$/.test(String(v[1]))) throw new Error();
-        after = [v[0], String(v[1])];
+        const src = v[2] ?? 'a';
+        if (src !== 'a' && src !== 'q') throw new Error();
+        after = [v[0], String(v[1]), src];
       } catch {
         return json(400, { error: 'cursor_invalid' });
       }
     }
-    // Rejected proposals are shown as rejected trades; other proposals and no-ops stay out of the feed.
-    const r = await d.db.query<Record<string, string | null> & { cur_at: string }>(
-      `SELECT *, created_at::text AS cur_at FROM activity
-       WHERE lower(vault)=$1 AND (kind IN ('swap','deposit','withdraw') OR (kind='propose' AND status='rejected'))
-         AND ($2::timestamptz IS NULL OR (created_at, id) < ($2::timestamptz, $3::bigint))
-       ORDER BY created_at DESC, id DESC LIMIT $4`,
-      [vault, after?.[0] ?? null, after?.[1] ?? '0', limit + 1]);
+    const r = await d.db.query<{ src: 'a' | 'q'; id: string; first_at: string; last_at: string; n: number; cur_at: string }>(
+      `WITH s AS (
+         SELECT created_at AS at, 'a'::text AS src, id, NULL::text AS outcome, NULL::text AS approval_id FROM activity
+         WHERE lower(vault)=$1 AND (kind IN ('swap','deposit','withdraw') OR (kind='propose' AND status='rejected'))
+         UNION ALL
+         SELECT requested_at, 'q', id, outcome, approval_id FROM textile_quotes
+         WHERE lower(vault)=$1 AND outcome <> 'filled' AND tx_hash IS NULL
+       ), l AS (
+         SELECT *,
+           (src='q' AND NOT (outcome='price_moved' AND approval_id IS NOT NULL)) AS collapsible,
+           lag(src) OVER w AS p_src, lag(outcome) OVER w AS p_outcome,
+           lag(outcome='price_moved' AND approval_id IS NOT NULL) OVER w AS p_pinned
+         FROM s WINDOW w AS (ORDER BY at, src, id)
+       ), g AS (
+         SELECT *, sum(CASE WHEN collapsible AND p_src='q' AND p_outcome=outcome AND NOT p_pinned THEN 0 ELSE 1 END)
+           OVER (ORDER BY at, src, id) AS grp FROM l
+       ), agg AS (
+         SELECT min(src) AS src, (array_agg(id ORDER BY at, id))[1] AS id, min(at) AS first_at, max(at) AS last_at,
+           count(*)::int AS n FROM g GROUP BY grp
+       )
+       SELECT *, first_at::text AS cur_at FROM agg
+       WHERE $2::timestamptz IS NULL OR (first_at, src, id) < ($2::timestamptz, $4::text, $3::bigint)
+       ORDER BY first_at DESC, src DESC, id DESC LIMIT $5`,
+      [vault, after?.[0] ?? null, after?.[1] ?? '0', after?.[2] ?? 'a', limit + 1]);
     const page = r.rows.slice(0, limit);
     const last = page[page.length - 1];
     const nextCursor = r.rows.length > limit && last
-      ? Buffer.from(JSON.stringify([last.cur_at, String(last.id)])).toString('base64url') : null;
+      ? Buffer.from(JSON.stringify([last.cur_at, String(last.id), last.src])).toString('base64url') : null;
+    const ids = (src: 'a' | 'q') => page.filter((x) => x.src === src).map((x) => String(x.id));
+    const aRows = new Map<string, Record<string, string | null>>();
+    const qRows = new Map<string, Record<string, string | null>>();
+    if (ids('a').length) {
+      for (const x of (await d.db.query<Record<string, string | null>>('SELECT * FROM activity WHERE id = ANY($1::bigint[])', [ids('a')])).rows) aRows.set(String(x.id), x);
+    }
+    if (ids('q').length) {
+      for (const x of (await d.db.query<Record<string, string | null>>('SELECT * FROM textile_quotes WHERE id = ANY($1::bigint[])', [ids('q')])).rows) qRows.set(String(x.id), x);
+    }
     return json(200, {
       nextCursor,
-      items: page.map((a) => {
+      items: page.map((g) => {
+        if (g.src === 'q') {
+          const x = qRows.get(String(g.id))!;
+          return {
+            id: `q${g.id}`, kind: 'check' as const, outcome: x.outcome as RfqOutcome, reason: x.outcome_reason,
+            at: iso(g.first_at), createdAt: iso(g.first_at),
+            count: g.n, firstAt: iso(g.first_at), lastAt: iso(g.last_at),
+            approvalId: x.approval_id ?? null,
+            rateNgnPerUsd: x.rate_ngn_per_usd ?? null, feedRateNgnPerUsd: x.feed_rate_ngn_per_usd ?? null,
+            sizeUsd: x.size_usd ?? null, venue: x.venue ?? null,
+          };
+        }
+        const a = aRows.get(String(g.id))!;
         const rate = Number(a.rate ?? 0);
         const at = a.created_at!;
         const outAmt = a.amount_out; // actual received; null for legacy rows (never minOut)
+        const outcome: RfqOutcome | null = a.kind === 'swap'
+          ? (a.status === 'confirmed' ? 'filled' : a.status === 'failed' ? 'expired' : null)
+          : a.kind === 'propose' ? 'declined' : null;
         return {
-          id: String(a.id), kind: a.kind === 'propose' ? 'swap' : a.kind, reason: a.reason, txHash: a.tx_hash, status: a.status, at: iso(at),
+          id: String(a.id), kind: a.kind === 'propose' ? 'swap' : a.kind, reason: a.reason, txHash: a.tx_hash, status: a.status,
+          at: iso(at), createdAt: iso(at), outcome,
           in: a.amount_in && rate ? m(sym(a.token_in), a.amount_in, rate, at) : undefined,
           out: outAmt && rate ? m(sym(a.token_out), outAmt, rate, at) : undefined,
           // Actual tokenOut received (base units), from the vault's Swapped event. Null for legacy rows.
@@ -169,6 +237,16 @@ export function createApi(d: ApiDeps) {
         };
       }),
     });
+  }
+
+  /** Executed approvals only: actual fill from the Swapped event (amountIn/amountOut), never the quote. */
+  function fill(a: Record<string, string>) {
+    if (a.status !== 'executed' || !a.executed_amount_in || !a.executed_amount_out) return { fillRateNgnPerUsd: null, amountOut: null };
+    const ngnIn = sym(a.token_in) === 'cNGN';
+    return {
+      fillRateNgnPerUsd: fillRate(ngnIn, BigInt(a.executed_amount_in), BigInt(a.executed_amount_out), { cngn: decOf('cNGN'), usdt: decOf('USDT') }),
+      amountOut: a.executed_amount_out,
+    };
   }
 
   async function approvals(vault: string) {
@@ -194,6 +272,7 @@ export function createApi(d: ApiDeps) {
           // User's floor in tokenOut base units: the agent only trades at this or better.
           approvedMinOut: a.min_out,
           executedTx: a.executed_tx ?? null,
+          ...fill(a),
           rejectedAt: a.rejected_at ? iso(a.rejected_at) : null,
           rateNgnPerUsd: rate > 0 ? String(rate) : null,
           rateNote: rate > 0 ? undefined : 'rate unavailable',
