@@ -117,6 +117,9 @@ Writes (approve, set limits, deposit, withdraw) are **signed by the user's walle
 - Approvals: `rateNgnPerUsd` is `null` when there's no quote, and the UI shows "Rate unavailable". There's no fallback rate.
 - P&L: `pnlNgn`, `pnlUsd` and `pnlSince` are all `null` until there's a baseline (first funding).
 
+- Reject: owner-only `reject(id)` moves a pending approval to a final `Rejected` state and emits `SwapRejected(id)`. `approve` or `reject` on a non-pending id reverts. The agent waits a cooldown before re-proposing the same trade. The API returns `status: "rejected"` on approvals and activity.
+- Paging: `/activity?cursor=` is keyset paging on `(createdAt, id)`, newest first. The response includes `nextCursor`, which is `null` on the last page.
+
 ### Risk presets (Create Vault step 2, "How much freedom should the agent have?", Balanced selected by default)
 | Preset | Max per trade | Daily | Asks above | Slippage |
 |---|---|---|---|---|
