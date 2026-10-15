@@ -3,6 +3,8 @@
 import { ReactNode, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import s from './ConnectSheet.module.css';
+import a from './AvatarPicker.module.css';
+import { AvatarPicker, WalletAvatar } from './AvatarPicker';
 import { ConnectSheet } from './ConnectSheet';
 import { disconnectWallet, shorten, useWallet } from '../lib/wallet';
 
@@ -34,7 +36,13 @@ export function WalletMenu({ trigger }: { trigger: ReactNode }) {
       </button>
       {open ? (
         <div className={s.menu} role="menu">
-          <div className={s.menuHead}><b>{shorten(address)}</b>{label ?? 'Wallet'}</div>
+          <div className={s.menuHead}>
+            <span className={a.idRow}>
+              <WalletAvatar address={address} size={44} decorative />
+              <span><b>{shorten(address)}</b>{label ?? 'Wallet'}</span>
+            </span>
+          </div>
+          <AvatarPicker address={address} />
           <button type="button" role="menuitem" className={s.menuItem} onClick={() => { setOpen(false); setSheet(true); }}>Switch wallet</button>
           <button type="button" role="menuitem" className={`${s.menuItem} ${s.danger}`} onClick={() => { void onDisconnect(); }}>Disconnect</button>
         </div>

@@ -8,8 +8,9 @@ import { ErrorBanner } from './ErrorBanner';
 import { Skeleton } from './Skeleton';
 import { ConnectSheet } from './ConnectSheet';
 import g from './ConnectGate.module.css';
+import { WalletChip } from './AvatarPicker';
 import { SwitchNetworkBar, WalletMenu } from './WalletMenu';
-import { CHAIN_NAME, shorten, switchToAppChain, useWallet } from '../lib/wallet';
+import { CHAIN_NAME, switchToAppChain, useWallet } from '../lib/wallet';
 
 export function WalletGate({ children, bare }: { children: (address: string, miniPay: boolean) => ReactNode; /** Skip the default header (screens with their own top bar). */ bare?: boolean }) {
   const { address, miniPay, booting, connecting, error, connect, setError, wrongChain } = useWallet();
@@ -104,7 +105,7 @@ export function WalletGate({ children, bare }: { children: (address: string, min
         <SwitchNetworkBar onSwitch={doSwitch} busy={switching} chainName={CHAIN_NAME} />
         {switchErr ? <p className="small" style={{ maxWidth: 520, margin: '8px auto', color: 'var(--danger)' }}>{switchErr}</p> : null}
         <div style={{ maxWidth: 520, margin: '12px auto', display: 'flex', justifyContent: 'flex-end' }}>
-          <WalletMenu trigger={<span className="small" style={{ color: 'var(--ink-muted)' }}>{shorten(address)} ▾</span>} />
+          <WalletMenu trigger={<WalletChip address={address} />} />
         </div>
       </div>
     );
@@ -130,15 +131,7 @@ export function WalletGate({ children, bare }: { children: (address: string, min
         </span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
         <ThemeToggle />
-        <WalletMenu
-          trigger={
-            <span className="small" style={{ color: 'var(--ink-muted)' }}>
-              {miniPay ? 'MiniPay · ' : ''}
-              {shorten(address)}
-              {miniPay ? '' : ' ▾'}
-            </span>
-          }
-        />
+        <WalletMenu trigger={<WalletChip address={address} miniPay={miniPay} />} />
         </span>
       </header>
       <Fragment key={address}>{children(address, miniPay)}</Fragment>

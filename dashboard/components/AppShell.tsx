@@ -5,11 +5,11 @@ import { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { BottomNav, NAV_ITEMS } from './BottomNav';
+import { WalletChip, WalletAvatar } from './AvatarPicker';
 import { WalletMenu } from './WalletMenu';
 import o from './Overview.module.css';
 import s from './AppShell.module.css';
 import { shorten } from '../lib/wallet';
-import { initials } from '../lib/overviewView';
 
 const NETWORK_LABEL = process.env.NEXT_PUBLIC_NETWORK === 'celo' ? 'Celo' : 'Celo Sepolia';
 
@@ -49,7 +49,7 @@ export function AppShell({
       </aside>
 
       <div className={s.body}>
-        {/* Mobile header (unchanged from WalletGate's default header). */}
+        {/* Mobile header (same chrome as WalletGate's default header). */}
         <header className={s.mobHead}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
             <img src="/logo-v2.svg" alt="" width={28} height={28} style={{ borderRadius: 8 }} />
@@ -57,15 +57,7 @@ export function AppShell({
           </span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
           <ThemeToggle />
-          <WalletMenu
-            trigger={
-              <span className="small" style={{ color: 'var(--ink-muted)' }}>
-                {miniPay ? 'MiniPay · ' : ''}
-                {shorten(address)}
-                {miniPay ? '' : ' ▾'}
-              </span>
-            }
-          />
+          <WalletMenu trigger={<WalletChip address={address} miniPay={miniPay} />} />
           </span>
         </header>
 
@@ -75,7 +67,7 @@ export function AppShell({
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <ThemeToggle />
             <span className={`${o.chip} ${o.chipLt}`}>● {NETWORK_LABEL}{miniPay ? ' · MiniPay' : ''}</span>
-            <WalletMenu trigger={<span className={o.av} title={owner} aria-label={`Wallet ${shorten(owner)}`}>{initials(owner)}</span>} />
+            <WalletMenu trigger={<WalletAvatar address={owner} title={owner} label={`Wallet ${shorten(owner)}`} />} />
           </div>
         </header>
 
