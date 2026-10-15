@@ -2,6 +2,11 @@
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { CHAIN } from './overview';
+import {
+  clearSession,
+  hasValidSession,
+  requestLoginSignature,
+} from './session';
 
 export type EthProvider = {
   isMiniPay?: boolean;
@@ -27,12 +32,45 @@ export const CHAIN_ID = CHAIN.id;
 export const CHAIN_NAME = CHAIN.id === 42220 ? 'Celo' : 'Celo Sepolia';
 const LAST_KEY = 'ng.lastConnector';
 
+export const MSG_LOGIN_SIGN = 'Sign the short login message in your wallet to continue.';
+export const MSG_LOGIN_REJECTED = 'You cancelled the login signature. Try again when you are ready.';
+
+export class LoginSignatureRejectedError extends Error {
+  code = 4001 as const;
+  constructor(message = MSG_LOGIN_REJECTED) {
+    super(message);
+    this.name = 'LoginSignatureRejectedError';
+  }
+}
+
 export function isMiniPay(): boolean {
   return typeof window !== 'undefined' && !!window.ethereum?.isMiniPay;
 }
 
 export function shorten(addr: string) {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+}
+
+function sessionStore(): Storage | null {
+  if (typeof window === 'undefined') return null;
+  try { return window.sessionStorage; } catch { return null; }
+}
+
+function clearLoginSession() {
+  const s = sessionStore();
+  if (s) clearSession(s);
+}
+
+function sessionOk(address: string): boolean {
+  const s = sessionStore();
+  return !!s && hasValidSession(s, address);
+}
+
+/** True when the store has an address that is MiniPay or has a signed session. */
+export function sessionReady(): boolean {
+  if (!state.address) return false;
+  if (state.kind === 'minipay') return true;
+  return sessionOk(state.address);
 }
 
 /* ---------------- shared store: one active provider for every read/write ---------------- */
@@ -52,9 +90,35 @@ export function getProvider(): EthProvider | undefined {
 let detach: (() => void) | null = null;
 function attach(provider: EthProvider) {
   detach?.();
-  const onAcc = (a: string[]) => set({ address: (a?.[0] as `0x${string}`) ?? null });
+  const onAcc = (a: string[]) => {
+    const next = (a?.[0] as `0x${string}`) ?? null;
+    if (!next) {
+      clearLoginSession();
+      set({ address: null });
+      return;
+    }
+    if (state.kind === 'minipay') {
+      set({ address: next });
+      return;
+    }
+    // Account switch without a matching signed session → log out.
+    if (sessionOk(next)) {
+      set({ address: next });
+      return;
+    }
+    clearLoginSession();
+    try { localStorage.removeItem(LAST_KEY); } catch {}
+    detach?.();
+    detach = null;
+    set({ provider: null, kind: null, label: null, address: null, chainId: null });
+  };
   const onChain = (c: string | number) => set({ chainId: Number(c) });
-  const onDisc = () => { if (state.kind !== 'minipay') set({ address: null }); };
+  const onDisc = () => {
+    if (state.kind === 'minipay') return;
+    clearLoginSession();
+    try { localStorage.removeItem(LAST_KEY); } catch {}
+    set({ provider: null, kind: null, label: null, address: null, chainId: null });
+  };
   provider.on?.('accountsChanged', onAcc);
   provider.on?.('chainChanged', onChain);
   provider.on?.('disconnect', onDisc);
@@ -69,11 +133,33 @@ async function readChain(p: EthProvider): Promise<number | null> {
   try { return Number(await p.request({ method: 'eth_chainId' })); } catch { return null; }
 }
 
-async function activate(provider: EthProvider, kind: ConnectorKind, label: string, request: boolean) {
-  const accounts = (await provider.request({ method: request ? 'eth_requestAccounts' : 'eth_accounts' })) as string[];
+/** Ask for a one-time personal_sign login. MiniPay skips this (cannot sign messages). */
+async function requireLoginSignature(provider: EthProvider, address: string, chainId: number) {
+  const store = sessionStore();
+  if (!store) throw new Error('Session storage is unavailable.');
+  try {
+    await requestLoginSignature(provider.request.bind(provider), store, address, chainId);
+  } catch (e) {
+    const code = (e as { code?: number }).code;
+    if (code === 4001) throw new LoginSignatureRejectedError();
+    throw e;
+  }
+}
+
+type ActivateOpts = { request: boolean; /** Skip personal_sign (boot restore with valid session, or MiniPay). */ skipSign?: boolean };
+
+async function activate(provider: EthProvider, kind: ConnectorKind, label: string, opts: ActivateOpts) {
+  const accounts = (await provider.request({ method: opts.request ? 'eth_requestAccounts' : 'eth_accounts' })) as string[];
   if (!accounts?.[0]) return false;
+  const address = accounts[0] as `0x${string}`;
+  const chainId = (await readChain(provider)) ?? CHAIN_ID;
+
+  if (kind !== 'minipay' && !opts.skipSign) {
+    await requireLoginSignature(provider, address, chainId);
+  }
+
   attach(provider);
-  set({ provider, kind, label, address: accounts[0] as `0x${string}`, chainId: await readChain(provider) });
+  set({ provider, kind, label, address, chainId });
   if (kind !== 'minipay') try { localStorage.setItem(LAST_KEY, JSON.stringify({ kind, label })); } catch {}
   return true;
 }
@@ -117,22 +203,48 @@ async function getWalletConnect(): Promise<EthProvider> {
 }
 
 export async function connectInjected(w: DiscoveredWallet) {
-  return activate(w.provider, 'injected', w.name, true);
+  try {
+    return await activate(w.provider, 'injected', w.name, { request: true });
+  } catch (e) {
+    if (e instanceof LoginSignatureRejectedError) {
+      await revokeQuietly(w.provider, 'injected');
+    }
+    throw e;
+  }
 }
 
 export async function connectWalletConnect(label = 'WalletConnect') {
   if (!WC_PROJECT_ID) throw new Error('WalletConnect is not set up yet.');
   const p = (await getWalletConnect()) as EthProvider & { connect?: () => Promise<void>; session?: unknown };
   if (!p.session) await p.connect?.();
-  return activate(p, 'walletconnect', label, false);
+  try {
+    return await activate(p, 'walletconnect', label, { request: false });
+  } catch (e) {
+    if (e instanceof LoginSignatureRejectedError) {
+      await revokeQuietly(p, 'walletconnect');
+    }
+    throw e;
+  }
+}
+
+async function revokeQuietly(p: EthProvider | null | undefined, kind: ConnectorKind | null) {
+  clearLoginSession();
+  try { localStorage.removeItem(LAST_KEY); } catch {}
+  detach?.();
+  detach = null;
+  if (kind === 'walletconnect') await p?.disconnect?.().catch(() => {});
+  else await p?.request({ method: 'wallet_revokePermissions', params: [{ eth_accounts: {} }] }).catch(() => {});
+  set({ provider: null, kind: null, label: null, address: null, chainId: null });
 }
 
 export async function disconnectWallet() {
   const p = state.provider;
+  const kind = state.kind;
+  clearLoginSession();
   try { localStorage.removeItem(LAST_KEY); } catch {}
   detach?.();
   detach = null;
-  if (state.kind === 'walletconnect') await p?.disconnect?.().catch(() => {});
+  if (kind === 'walletconnect') await p?.disconnect?.().catch(() => {});
   else await p?.request({ method: 'wallet_revokePermissions', params: [{ eth_accounts: {} }] }).catch(() => {});
   set({ provider: null, kind: null, label: null, address: null, chainId: null });
 }
@@ -157,22 +269,31 @@ export async function switchToAppChain(p: EthProvider | undefined = getProvider(
 }
 
 let booted = false;
-/** MiniPay: unchanged auto-connect. Elsewhere: silently restore the last wallet if it is still authorised. */
+/**
+ * MiniPay: unchanged auto-connect (no personal_sign — MiniPay cannot sign messages).
+ * Elsewhere: silently restore LAST_KEY only when a valid sessionStorage login exists for that address.
+ */
 async function boot() {
   if (booted || typeof window === 'undefined') return;
   booted = true;
   const eth = window.ethereum;
   if (eth?.isMiniPay) {
-    await activate(eth, 'minipay', 'MiniPay', true).catch(() => false);
+    await activate(eth, 'minipay', 'MiniPay', { request: true, skipSign: true }).catch(() => false);
     return;
   }
   let last: { kind?: ConnectorKind; label?: string } = {};
   try { last = JSON.parse(localStorage.getItem(LAST_KEY) ?? '{}'); } catch {}
+
   if (last.kind === 'walletconnect' && WC_PROJECT_ID) {
     const p = (await getWalletConnect().catch(() => null)) as (EthProvider & { session?: unknown }) | null;
-    if (p?.session) await activate(p, 'walletconnect', last.label ?? 'WalletConnect', false).catch(() => false);
+    if (!p?.session) return;
+    const accounts = (await p.request({ method: 'eth_accounts' }).catch(() => [])) as string[];
+    if (!accounts?.[0] || !sessionOk(accounts[0])) return;
+    await activate(p, 'walletconnect', last.label ?? 'WalletConnect', { request: false, skipSign: true }).catch(() => false);
   } else if (last.kind === 'injected' && eth) {
-    await activate(eth, 'injected', last.label ?? 'Browser wallet', false).catch(() => false);
+    const accounts = (await eth.request({ method: 'eth_accounts' }).catch(() => [])) as string[];
+    if (!accounts?.[0] || !sessionOk(accounts[0])) return;
+    await activate(eth, 'injected', last.label ?? 'Browser wallet', { request: false, skipSign: true }).catch(() => false);
   }
 }
 
@@ -195,14 +316,31 @@ export function useWallet() {
     setConnecting(true);
     setError(null);
     try {
-      if (!(await activate(eth, eth.isMiniPay ? 'minipay' : 'injected', eth.isMiniPay ? 'MiniPay' : 'Browser wallet', true))) setError('No account returned.');
-    } catch {
-      setError('Wallet connection was cancelled.');
+      const kind: ConnectorKind = eth.isMiniPay ? 'minipay' : 'injected';
+      const label = eth.isMiniPay ? 'MiniPay' : 'Browser wallet';
+      if (!(await activate(eth, kind, label, { request: true, skipSign: kind === 'minipay' }))) setError('No account returned.');
+    } catch (e) {
+      if (e instanceof LoginSignatureRejectedError) setError(e.message);
+      else setError('Wallet connection was cancelled.');
     } finally {
       setConnecting(false);
     }
   }, []);
 
   const wrongChain = !miniPay && !!s.address && s.chainId !== null && s.chainId !== CHAIN_ID;
-  return { address: s.address, kind: s.kind, label: s.label, chainId: s.chainId, wrongChain, miniPay, booting, connecting, error, connect, setError };
+  const ready = !!s.address && (miniPay || s.kind === 'minipay' || sessionOk(s.address));
+  return {
+    address: s.address,
+    kind: s.kind,
+    label: s.label,
+    chainId: s.chainId,
+    wrongChain,
+    miniPay,
+    booting,
+    connecting,
+    error,
+    connect,
+    setError,
+    sessionReady: ready,
+  };
 }
