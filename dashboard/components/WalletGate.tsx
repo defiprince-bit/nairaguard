@@ -46,7 +46,7 @@ export function WalletGate({ children, bare }: { children: (address: string, min
         <div className={g.layout}>
         <section className={`${g.hero} ${g.desk}`}>
           <h1 className={g.headline}>Your savings, <em>guarded</em> against naira swings.</h1>
-          <p className={g.lede}>An AI agent keeps your USD₮ and cNGN at the mix you choose, on Celo. Non-custodial, always.</p>
+          <p className={g.lede}>Your savings, balanced between naira and dollars at the mix you choose. Your own vault, and only you can withdraw.</p>
           <ul className={g.feats}>
             <li className={g.feat}><b>24/7</b><span>Agent watches the rate</span></li>
             <li className={g.feat}><b>You</b><span>Own the vault, withdraw anytime</span></li>
@@ -76,7 +76,7 @@ export function WalletGate({ children, bare }: { children: (address: string, min
               <p>On your phone? Open in <strong>MiniPay</strong>, the quickest way in.</p>
             </div>
           ) : null}
-          <p className={g.note}>Non-custodial · withdraw anytime</p>
+          <p className={g.note}>Your own vault · withdraw anytime</p>
         </div>
         </div>
         {sheet && !miniPay ? <ConnectSheet onClose={() => setSheet(false)} /> : null}
