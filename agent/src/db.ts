@@ -52,6 +52,29 @@ export type ActivityRow = {
   chainId?: number;
 };
 
+/** Codes for "checked, no trade" rows: strategy codes plus loop-level skips. */
+export type CheckCode = 'empty' | 'in_band' | 'below_min' | 'daily_limit' | 'trade_limit'
+  | 'paused' | 'stale_price' | 'pending_approval' | 'declined_recently';
+
+/**
+ * Record a "checked, no trade" row only when the outcome changed: the vault's latest visible activity is not
+ * a check with the same code (a trade, deposit or different reason since then → record again). Returns true if written.
+ */
+export async function insertCheck(
+  db: Db, a: { vault: string; code: CheckCode; reason: string; rate?: string; chainId?: number },
+): Promise<boolean> {
+  const chainId = a.chainId ?? AGENT_CHAIN_ID;
+  const last = (await db.query<{ kind: string; check_code: string | null }>(
+    `SELECT kind, check_code FROM activity WHERE lower(vault)=lower($1) AND chain_id=$2 AND (kind <> 'noop' OR check_code IS NOT NULL)
+     ORDER BY created_at DESC, id DESC LIMIT 1`, [a.vault, chainId])).rows[0];
+  if (last && last.kind === 'noop' && last.check_code === a.code) return false;
+  await db.query(
+    `INSERT INTO activity (vault, kind, rate, reason, status, check_code, chain_id) VALUES ($1,'noop',$2,$3,'skipped',$4,$5)`,
+    [a.vault, a.rate ?? null, a.reason, a.code, chainId],
+  );
+  return true;
+}
+
 export async function insertActivity(db: Db, a: ActivityRow): Promise<void> {
   await db.query(
     `INSERT INTO activity (vault, kind, token_in, token_out, amount_in, min_out, usd_value, rate, reason, tx_hash, status, amount_out, venue, venue_target, chain_id)

@@ -229,6 +229,34 @@ describe('agent loop guards', () => {
     expect(chain.sent).toHaveLength(0);
   });
 
+  it('records a "checked" row only when the no-trade reason changes', async () => {
+    const checks = async () => (await acts()).filter((a) => a.kind === 'noop' && a.check_code);
+    const chain = new FakeChain(state({ ngnBalance: e6(150_000), usdBalance: e6(100) }));
+    await runOnce(deps(chain));
+    await runOnce(deps(chain));
+    await runOnce(deps(chain));
+    expect((await checks()).map((c) => c.check_code)).toEqual(['in_band']);
+    expect((await checks())[0]).toMatchObject({ status: 'skipped', reason: expect.stringMatching(/within the 5% band/) });
+    // 1 USDT, no naira: the ideal move is $0.50, under the $1 minimum.
+    const small = new FakeChain(state({ ngnBalance: 0n, usdBalance: e6(1) }));
+    await runOnce(deps(small));
+    await runOnce(deps(small));
+    const c = await checks();
+    expect(c.map((x) => x.check_code)).toEqual(['in_band', 'below_min']);
+    expect(c[1].reason).toMatch(/only \$0\.50, under the \$1\.00 minimum/);
+    await runOnce(deps(chain));
+    expect((await checks()).map((x) => x.check_code)).toEqual(['in_band', 'below_min', 'in_band']);
+  });
+
+  it('records a fresh check after a trade even if the reason matches the last check', async () => {
+    const inBand = new FakeChain(state({ ngnBalance: e6(150_000), usdBalance: e6(100) }));
+    await runOnce(deps(inBand));
+    await runOnce(deps(new FakeChain(state(), [swappedLog(55_000_000n)])));
+    await runOnce(deps(inBand));
+    expect((await acts()).filter((a) => a.check_code || a.kind === 'swap').map((a) => a.check_code ?? a.kind))
+      .toEqual(['in_band', 'swap', 'in_band']);
+  });
+
   it('does not trade while paused', async () => {
     const chain = new FakeChain(state({ paused: true }));
     expect((await runOnce(deps(chain))).skipped).toMatch(/paused/);

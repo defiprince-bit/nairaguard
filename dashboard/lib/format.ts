@@ -82,6 +82,10 @@ export function approvalRate(a: ApprovalItem): number | null {
 }
 
 export type Filter = 'all' | 'executed' | 'pending' | 'failed';
+/** A "checked, no trade needed" line (kind 'check' without an RFQ outcome). */
+export const isNoTradeCheck = (item: ActivityItem) => item.kind === 'check' && !item.outcome;
+export const checkLine = (item: ActivityItem) => `Checked, no trade needed: ${item.reason}`;
+
 export function matchesFilter(item: ActivityItem, f: Filter) {
   if (f === 'all') return true;
   if (f === 'executed') return item.status === 'confirmed';

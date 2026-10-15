@@ -1,6 +1,6 @@
 import { type Hex, type Log, decodeEventLog, formatUnits, parseUnits } from 'viem';
 import {
-  type Db, hasPendingApproval, insertActivity, insertApproval, insertRfqQuote, markExecuted, readyApproval,
+  type CheckCode, type Db, hasPendingApproval, insertActivity, insertCheck, insertApproval, insertRfqQuote, markExecuted, readyApproval,
   recentRejection, recordRun, REJECT_COOLDOWN_MS, REJECT_DRIFT_CHANGE_BPS, type RfqOutcome,
 } from './db.js';
 import type { FeedReading } from './feed.js';
@@ -82,14 +82,14 @@ export async function runOnce(d: LoopDeps): Promise<RunResult> {
     const dec: Decimals = { ngn: s.ngnDecimals, usd: s.usdDecimals };
     await logQuote(d.db, d.vault, s.ngnBalance, s.usdBalance, rate, now, dec, d.chainId);
 
-    const skip = async (why: string, decision?: StrategyDecision): Promise<RunResult> => {
-      await insertActivity(d.db, { chainId: d.chainId, vault: d.vault, kind: 'noop', reason: why, rate: String(rate), status: 'skipped' });
+    const skip = async (code: CheckCode, why: string, decision?: StrategyDecision): Promise<RunResult> => {
+      await insertCheck(d.db, { chainId: d.chainId, vault: d.vault, code, reason: why, rate: String(rate) });
       await recordRun(d.db, d.vault, true);
       return { decision, skipped: why };
     };
 
-    if (s.paused) return skip('Vault is paused by the owner, so no trade.');
-    if (!feed || feed.stale) return skip(STALE_PRICE);
+    if (s.paused) return skip('paused', 'Vault is paused by the owner, so no trade.');
+    if (!feed || feed.stale) return skip('stale_price', STALE_PRICE);
 
     // 1. An approved proposal inside its window runs first, with a fresh quote at approvedMinOut or better.
     const ready = await readyApproval(d.db, d.vault, now);
@@ -119,7 +119,7 @@ export async function runOnce(d: LoopDeps): Promise<RunResult> {
       },
     });
 
-    if (decision.action === 'none') return skip(decision.reason, decision);
+    if (decision.action === 'none') return skip(decision.code, decision.reason, decision);
     const [tokenIn, tokenOut] = decision.direction === 'ngnToUsd' ? [d.cngn, d.usdt] : [d.usdt, d.cngn];
     const [dIn, dOut] = decision.direction === 'ngnToUsd' ? [dec.ngn, dec.usd] : [dec.usd, dec.ngn];
     let amountIn = toUnits(decision.amountIn, dIn);
@@ -134,10 +134,10 @@ export async function runOnce(d: LoopDeps): Promise<RunResult> {
     }
 
     // propose
-    if (await hasPendingApproval(d.db, d.vault, now)) return skip('A proposal is already waiting for your approval.', decision);
+    if (await hasPendingApproval(d.db, d.vault, now)) return skip('pending_approval', 'A proposal is already waiting for your approval.', decision);
     const rej = await recentRejection(d.db, d.vault, tokenIn, tokenOut, now, d.rejectCooldownMs ?? REJECT_COOLDOWN_MS);
     const driftMoved = rej?.ngnShareBps != null && Math.abs(ngnShareBps - rej.ngnShareBps) >= REJECT_DRIFT_CHANGE_BPS;
-    if (rej && !driftMoved) return skip('You declined this trade recently, so the agent is waiting before asking again.', decision);
+    if (rej && !driftMoved) return skip('declined_recently', 'You declined this trade recently, so the agent is waiting before asking again.', decision);
 
     // approvedMinOut: the strategy floor, never below what the vault's Chainlink floor allows.
     let minOut = toUnits(decision.minOut, dOut);

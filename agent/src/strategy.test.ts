@@ -87,3 +87,17 @@ describe('strategy.decide', () => {
     expect(decide({ ngnBalance: 0, usdBalance: 0, rateNgnPerUsd: rate, limits, dailySpentUsd: 0 }).action).toBe('none');
   });
 });
+
+describe('no-trade codes', () => {
+  const limits = { maxTradeUsd: 100, maxDailyUsd: 500, approvalThresholdUsd: 100, maxSlippageBps: 100, targetNgnBps: 5000 };
+  it('in band, below minimum, daily limit, per-trade limit, empty', () => {
+    expect(decide({ ngnBalance: 150_000, usdBalance: 100, rateNgnPerUsd: 1500, limits, dailySpentUsd: 0 })).toMatchObject({ action: 'none', code: 'in_band' });
+    const small = decide({ ngnBalance: 0, usdBalance: 1, rateNgnPerUsd: 1500, limits, dailySpentUsd: 0 });
+    expect(small).toMatchObject({ action: 'none', code: 'below_min' });
+    expect(small.reason).toMatch(/\$0\.50, under the \$1\.00 minimum/);
+    expect(decide({ ngnBalance: 0, usdBalance: 100, rateNgnPerUsd: 1500, limits, dailySpentUsd: 500 })).toMatchObject({ code: 'daily_limit' });
+    expect(decide({ ngnBalance: 0, usdBalance: 100, rateNgnPerUsd: 1500, limits: { ...limits, maxTradeUsd: 0.5 }, dailySpentUsd: 0 })).toMatchObject({ code: 'trade_limit' });
+    expect(decide({ ngnBalance: 0, usdBalance: 0, rateNgnPerUsd: 1500, limits, dailySpentUsd: 0 })).toMatchObject({ code: 'empty' });
+  });
+});
+

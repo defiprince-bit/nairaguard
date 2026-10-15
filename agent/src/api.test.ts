@@ -136,6 +136,24 @@ describe('reject + paging', () => {
   });
 });
 
+describe('activity checks', () => {
+  it('lists coded no-trade checks as kind "check" with reason and at; hides legacy noop rows; pages', async () => {
+    await db.query(`INSERT INTO activity (vault, kind, reason, status, created_at) VALUES ($1,'noop','legacy tick','skipped','2026-10-14T09:00:00Z')`, [VAULT]);
+    await db.query(`INSERT INTO activity (vault, kind, reason, status, created_at) VALUES ($1,'swap','r','confirmed','2026-10-14T10:00:00Z')`, [VAULT]);
+    await db.query(`INSERT INTO activity (vault, kind, reason, status, check_code, created_at)
+      VALUES ($1,'noop','Within band, no trade.','skipped','in_band','2026-10-14T11:00:00Z')`, [VAULT]);
+    const body = (await api().handle({ method: 'GET', url: `/api/vault/${VAULT}/activity` })).body as any;
+    expect(body.items).toHaveLength(2);
+    expect(body.items[0]).toMatchObject({ kind: 'check', code: 'in_band', reason: 'Within band, no trade.', at: '2026-10-14T11:00:00.000Z', outcome: null });
+    expect(body.items[1]).toMatchObject({ kind: 'swap', status: 'confirmed' });
+    const p1 = (await api().handle({ method: 'GET', url: `/api/vault/${VAULT}/activity?limit=1` })).body as any;
+    expect(p1.items[0].kind).toBe('check');
+    const p2 = (await api().handle({ method: 'GET', url: `/api/vault/${VAULT}/activity?limit=1&cursor=${p1.nextCursor}` })).body as any;
+    expect(p2.items[0].kind).toBe('swap');
+    expect(p2.nextCursor).toBeNull();
+  });
+});
+
 describe('read endpoints', () => {
   it('limits, activity, approvals, agent', async () => {
     const a = api();

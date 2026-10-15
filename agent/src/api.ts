@@ -176,7 +176,8 @@ export function createApi(d: ApiDeps) {
     const r = await d.db.query<{ src: 'a' | 'q'; id: string; first_at: string; last_at: string; n: number; cur_at: string }>(
       `WITH s AS (
          SELECT created_at AS at, 'a'::text AS src, id, NULL::text AS outcome, NULL::text AS approval_id FROM activity
-         WHERE lower(vault)=$1 AND (kind IN ('swap','deposit','withdraw') OR (kind='propose' AND status='rejected'))
+         WHERE lower(vault)=$1 AND (kind IN ('swap','deposit','withdraw') OR (kind='propose' AND status='rejected')
+           OR (kind='noop' AND check_code IS NOT NULL))
          UNION ALL
          SELECT requested_at, 'q', id, outcome, approval_id FROM textile_quotes
          WHERE lower(vault)=$1 AND outcome <> 'filled' AND tx_hash IS NULL
@@ -225,6 +226,13 @@ export function createApi(d: ApiDeps) {
           };
         }
         const a = aRows.get(String(g.id))!;
+        if (a.kind === 'noop') {
+          // "Checked, no trade needed": written only when the reason changes (see insertCheck).
+          return {
+            id: String(a.id), kind: 'check' as const, outcome: null, code: a.check_code, reason: a.reason,
+            status: 'skipped', at: iso(a.created_at!), createdAt: iso(a.created_at!), count: 1,
+          };
+        }
         const rate = Number(a.rate ?? 0);
         const at = a.created_at!;
         const outAmt = a.amount_out; // actual received; null for legacy rows (never minOut)
