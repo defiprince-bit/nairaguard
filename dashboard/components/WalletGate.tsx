@@ -39,9 +39,24 @@ export function WalletGate({ children, bare }: { children: (address: string, min
   if (!address) {
     return (
       <div className={g.screen}>
+        <header className={`${g.topbar} ${g.desk}`}>
+          <img src="/logo-v2.svg" alt="" width={40} height={40} />
+          <span>NairaGuard</span>
+        </header>
+        <div className={g.layout}>
+        <section className={`${g.hero} ${g.desk}`}>
+          <h1 className={g.headline}>Your savings, <em>guarded</em> against naira swings.</h1>
+          <p className={g.lede}>An AI agent keeps your USD₮ and cNGN at the mix you choose, on Celo. Non-custodial, always.</p>
+          <ul className={g.feats}>
+            <li className={g.feat}><b>24/7</b><span>Agent watches the rate</span></li>
+            <li className={g.feat}><b>You</b><span>Own the vault, withdraw anytime</span></li>
+            <li className={g.feat}><b>3%</b><span>Max slippage vs Chainlink</span></li>
+          </ul>
+        </section>
         <div className={g.card}>
           <img src="/icon-v2.svg" alt="" width={68} height={68} className={g.icon} />
-          <h1 className={g.title}>Connect your wallet</h1>
+          <h1 className={`${g.title} ${g.mob}`}>Connect your wallet</h1>
+          <h2 className={`${g.title} ${g.desk}`}>Connect your wallet</h2>
           <p className={g.sub}>
             {miniPay
               ? 'MiniPay is ready. Tap below if your wallet did not connect automatically.'
@@ -55,7 +70,14 @@ export function WalletGate({ children, bare }: { children: (address: string, min
               {connecting ? 'Connecting…' : 'Retry MiniPay connect'}
             </Button>
           )}
+          {!miniPay ? (
+            <div className={`${g.mp} ${g.desk}`}>
+              <img src="/minipay-logo.png" alt="MiniPay" width={40} height={40} />
+              <p>On your phone? Open in <strong>MiniPay</strong>, the quickest way in.</p>
+            </div>
+          ) : null}
           <p className={g.note}>Non-custodial · withdraw anytime</p>
+        </div>
         </div>
         {sheet && !miniPay ? <ConnectSheet onClose={() => setSheet(false)} /> : null}
       </div>
