@@ -2,6 +2,7 @@
 
 import { ThemeToggle } from './ThemeToggle';
 import { Fragment, ReactNode, useEffect, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { Button } from './Button';
 import { ErrorBanner } from './ErrorBanner';
 import { Skeleton } from './Skeleton';
@@ -12,11 +13,22 @@ import { CHAIN_NAME, shorten, switchToAppChain, useWallet } from '../lib/wallet'
 
 export function WalletGate({ children, bare }: { children: (address: string, miniPay: boolean) => ReactNode; /** Skip the default header (screens with their own top bar). */ bare?: boolean }) {
   const { address, miniPay, booting, connecting, error, connect, setError, wrongChain } = useWallet();
+  const pathname = usePathname();
+  const router = useRouter();
   // ?connect=1 opens the sheet straight away (outreach links, demo recording).
   const [sheet, setSheet] = useState(false);
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get('connect') === '1') setSheet(true);
   }, []);
+
+  // After disconnect (menu or wallet-side), land on Overview — not /app/limits etc.
+  useEffect(() => {
+    if (booting || miniPay || address) return;
+    if (pathname && pathname.startsWith('/app/') && pathname !== '/app') {
+      router.replace('/app');
+    }
+  }, [address, booting, miniPay, pathname, router]);
+
   const [switching, setSwitching] = useState(false);
   const [switchErr, setSwitchErr] = useState<string | null>(null);
 

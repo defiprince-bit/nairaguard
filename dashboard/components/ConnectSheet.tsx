@@ -2,7 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import s from './ConnectSheet.module.css';
-import { type DiscoveredWallet, WC_PROJECT_ID, connectInjected, connectWalletConnect, discoverWallets } from '../lib/wallet';
+import {
+  type DiscoveredWallet,
+  LoginSignatureRejectedError,
+  MSG_LOGIN_REJECTED,
+  WC_PROJECT_ID,
+  connectInjected,
+  connectWalletConnect,
+  discoverWallets,
+} from '../lib/wallet';
 
 const isValora = (w: DiscoveredWallet) => /valora/i.test(w.rdns) || /valora/i.test(w.name);
 
@@ -26,8 +34,12 @@ export function ConnectSheet({ onClose, onConnected }: { onClose: () => void; on
       if (await fn()) { onConnected?.(); onClose(); }
       else setError('No account was shared. Try again.');
     } catch (e) {
-      const code = (e as { code?: number }).code;
-      setError(code === 4001 ? 'Connection cancelled. You can try again any time.' : 'Couldn\u2019t connect that wallet. Try again or pick another.');
+      if (e instanceof LoginSignatureRejectedError) {
+        setError(MSG_LOGIN_REJECTED);
+      } else {
+        const code = (e as { code?: number }).code;
+        setError(code === 4001 ? 'Connection cancelled. You can try again any time.' : 'Couldn\u2019t connect that wallet. Try again or pick another.');
+      }
     } finally {
       setBusy(null);
     }
@@ -45,13 +57,13 @@ export function ConnectSheet({ onClose, onConnected }: { onClose: () => void; on
           <h2 className={s.title}>Connect wallet</h2>
           <button type="button" className={s.x} onClick={onClose} aria-label="Close">✕</button>
         </div>
-        <p className={s.sub}>Pick the wallet that holds your cNGN or USD₮. Your vault belongs to this address.</p>
+        <p className={s.sub}>Pick the wallet that holds your cNGN or USD₮. Your vault belongs to this address. You will sign a short login message (MiniPay skips this).</p>
         <div className={s.list}>
           {valoraInjected || wc ? (
             <button type="button" className={s.opt} disabled={!!busy}
               onClick={() => run('valora', () => (valoraInjected ? connectInjected(valoraInjected) : connectWalletConnect('Valora')))}>
               <span className={`${s.ic} ${s.valora}`}>V</span>
-              <span className={s.meta}>Valora<small>{busy === 'valora' ? 'Opening Valora…' : valoraInjected ? 'Detected in this browser' : 'Scan with the Valora app'}</small></span>
+              <span className={s.meta}>Valora<small>{busy === 'valora' ? 'Check your wallet…' : valoraInjected ? 'Detected in this browser' : 'Scan with the Valora app'}</small></span>
               <span className={s.chev}>›</span>
             </button>
           ) : null}

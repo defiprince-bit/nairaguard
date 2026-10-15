@@ -1,6 +1,7 @@
 'use client';
 
 import { ReactNode, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import s from './ConnectSheet.module.css';
 import { ConnectSheet } from './ConnectSheet';
 import { disconnectWallet, shorten, useWallet } from '../lib/wallet';
@@ -8,6 +9,7 @@ import { disconnectWallet, shorten, useWallet } from '../lib/wallet';
 /** Header wallet menu (outside MiniPay only): switch wallet / disconnect. Inside MiniPay, renders the trigger as-is. */
 export function WalletMenu({ trigger }: { trigger: ReactNode }) {
   const { address, label, miniPay } = useWallet();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [sheet, setSheet] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -17,6 +19,12 @@ export function WalletMenu({ trigger }: { trigger: ReactNode }) {
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, [open]);
+
+  async function onDisconnect() {
+    setOpen(false);
+    await disconnectWallet();
+    router.replace('/app');
+  }
 
   if (miniPay || !address) return <>{trigger}</>;
   return (
@@ -28,7 +36,7 @@ export function WalletMenu({ trigger }: { trigger: ReactNode }) {
         <div className={s.menu} role="menu">
           <div className={s.menuHead}><b>{shorten(address)}</b>{label ?? 'Wallet'}</div>
           <button type="button" role="menuitem" className={s.menuItem} onClick={() => { setOpen(false); setSheet(true); }}>Switch wallet</button>
-          <button type="button" role="menuitem" className={`${s.menuItem} ${s.danger}`} onClick={() => { setOpen(false); void disconnectWallet(); }}>Disconnect</button>
+          <button type="button" role="menuitem" className={`${s.menuItem} ${s.danger}`} onClick={() => { void onDisconnect(); }}>Disconnect</button>
         </div>
       ) : null}
       {sheet ? <ConnectSheet onClose={() => setSheet(false)} /> : null}
