@@ -28,7 +28,7 @@ function agentLine(agent: AgentStatus | null, vaultCheckedAt?: string | null, va
   if (!last) return { text: 'Agent not run yet', warn: true };
   const mins = Math.round((Date.now() - new Date(last).getTime()) / 60_000);
   if (mins > 15 || vaultOk === false || (vaultCheckedAt ? false : agent ? !agent.healthy : false)) return { text: `Agent quiet · last check ${mins} min ago`, warn: true };
-  return { text: `Agent active · last check ${Math.max(1, mins)} min ago`, warn: false };
+  return { text: `Active · checked ${Math.max(1, mins)} min ago`, warn: false };
 }
 
 function timeLabel(iso: string) {
