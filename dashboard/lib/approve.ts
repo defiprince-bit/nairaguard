@@ -1,5 +1,6 @@
-import { createWalletClient, custom, encodeFunctionData, parseAbi, type Hex } from 'viem';
-import { CHAIN } from './overview';
+import { encodeFunctionData, parseAbi, type Hex } from 'viem';
+import { sendTagged } from './sendTagged';
+import { getProvider } from './wallet';
 import { tag, waitForReceipt } from './vault';
 
 export const vaultApprovalAbi = parseAbi(['function approve(uint256 id) returns (uint64 expiresAt)']);
@@ -10,11 +11,10 @@ export function buildApproveSwap(vault: `0x${string}`, id: bigint) {
 }
 
 export async function sendApproveSwap(owner: `0x${string}`, vault: `0x${string}`, id: bigint): Promise<Hex> {
-  const eth = window.ethereum;
+  const eth = getProvider();
   if (!eth) throw new Error('No wallet found.');
-  const wallet = createWalletClient({ account: owner, chain: CHAIN, transport: custom(eth) });
   const tx = buildApproveSwap(vault, id);
-  const hash = await wallet.sendTransaction({ account: owner, chain: CHAIN, to: tx.to, data: tx.data });
+  const hash = await sendTagged(eth, owner, tx);
   const rc = await waitForReceipt(eth, hash);
   if (rc.status !== '0x1') throw new Error('Transaction failed on-chain.');
   return hash;
@@ -28,11 +28,10 @@ export function buildRejectSwap(vault: `0x${string}`, id: bigint) {
 }
 
 export async function sendRejectSwap(owner: `0x${string}`, vault: `0x${string}`, id: bigint): Promise<Hex> {
-  const eth = window.ethereum;
+  const eth = getProvider();
   if (!eth) throw new Error('No wallet found.');
-  const wallet = createWalletClient({ account: owner, chain: CHAIN, transport: custom(eth) });
   const tx = buildRejectSwap(vault, id);
-  const hash = await wallet.sendTransaction({ account: owner, chain: CHAIN, to: tx.to, data: tx.data });
+  const hash = await sendTagged(eth, owner, tx);
   const rc = await waitForReceipt(eth, hash);
   if (rc.status !== '0x1') throw new Error('Transaction failed on-chain.');
   return hash;

@@ -14,6 +14,7 @@ import { APPROVE_HELPER, approvalRate, approvalView, noRate, formatCountdown, la
 import { loadOverview, type OverviewBalances } from '../lib/overview';
 import { type ApiLimits, initials, pnlPct, presetFor, ringDash, signedMoney, splitAmount, usd18 } from '../lib/overviewView';
 import { shorten } from '../lib/wallet';
+import { WalletMenu } from './WalletMenu';
 import { FACTORY_ADDRESS } from '../lib/vault';
 import type { ActivityItem, AgentStatus, ApprovalItem } from '../lib/types';
 
@@ -191,7 +192,7 @@ export function Overview({ vault, owner, miniPay }: { vault: `0x${string}`; owne
           <span className={s.brand}><img src="/icon-v2.svg" alt="" />NairaGuard</span>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <span className={`${s.chip} ${s.chipLt}`}>● {NETWORK_LABEL}{miniPay ? ' · MiniPay' : ''}</span>
-            <span className={s.av} title={owner} aria-label={`Wallet ${shorten(owner)}`}>{initials(owner)}</span>
+            <WalletMenu trigger={<span className={s.av} title={owner} aria-label={`Wallet ${shorten(owner)}`}>{initials(owner)}</span>} />
           </div>
         </header>
 
