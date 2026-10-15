@@ -28,10 +28,13 @@ export type StrategyInput = {
   minTradeUsd?: number;
 };
 
+/** Stable reason for a no-trade decision (used to dedupe "checked" activity rows). */
+export type NoTradeCode = 'empty' | 'in_band' | 'below_min' | 'daily_limit' | 'trade_limit';
+
 export type Direction = 'ngnToUsd' | 'usdToNgn';
 
 export type StrategyDecision =
-  | { action: 'none'; ngnShareBps: number; reason: string }
+  | { action: 'none'; ngnShareBps: number; reason: string; code: NoTradeCode }
   | {
       action: 'swap' | 'propose';
       direction: Direction;
@@ -71,7 +74,7 @@ export function decide(input: StrategyInput): StrategyDecision {
   const ngnInUsd = ngnBalance / rate;
   const totalUsd = ngnInUsd + usdBalance;
   if (totalUsd <= 0) {
-    return { action: 'none', ngnShareBps: 0, reason: 'Vault is empty, so there is nothing to rebalance.' };
+    return { action: 'none', ngnShareBps: 0, code: 'empty', reason: 'Vault is empty, so there is nothing to rebalance.' };
   }
 
   const ngnShareBps = Math.round((ngnInUsd / totalUsd) * BPS);
@@ -83,6 +86,7 @@ export function decide(input: StrategyInput): StrategyDecision {
     return {
       action: 'none',
       ngnShareBps,
+      code: 'in_band',
       reason: `${head} That's within the ${pct(band)} band, so no trade.`,
     };
   }
@@ -92,10 +96,22 @@ export function decide(input: StrategyInput): StrategyDecision {
   const usdValue = Math.min(idealUsd, limits.maxTradeUsd, dailyLeft);
 
   if (usdValue < minTrade) {
+    // Say why honestly: the move itself is tiny, or the daily / per-trade limit is what's capping it.
+    if (idealUsd < minTrade) {
+      return {
+        action: 'none', ngnShareBps, code: 'below_min',
+        reason: `${head} Rebalancing would move only ${formatUsd(idealUsd)}, under the ${formatUsd(minTrade)} minimum trade, so no trade.`,
+      };
+    }
+    if (dailyLeft < minTrade) {
+      return {
+        action: 'none', ngnShareBps, code: 'daily_limit',
+        reason: `${head} The daily limit of ${formatUsd(limits.maxDailyUsd)} is used up, so no trade until tomorrow.`,
+      };
+    }
     return {
-      action: 'none',
-      ngnShareBps,
-      reason: `${head} The daily limit of ${formatUsd(limits.maxDailyUsd)} is used up, so no trade until tomorrow.`,
+      action: 'none', ngnShareBps, code: 'trade_limit',
+      reason: `${head} Your per-trade limit of ${formatUsd(limits.maxTradeUsd)} is under the ${formatUsd(minTrade)} minimum trade, so no trade.`,
     };
   }
 

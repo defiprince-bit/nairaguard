@@ -119,3 +119,15 @@ describe('reject + rate-unavailable', () => {
     expect(activityPath('0xab', 'a+b/=')).toBe('vault/0xab/activity?limit=20&cursor=a%2Bb%2F%3D');
   });
 });
+
+describe('no-trade check lines', () => {
+  it('formats kind "check" without an outcome as a muted check line', async () => {
+    const { isNoTradeCheck, checkLine, matchesFilter } = await import('./format');
+    const it0 = { id: '9', kind: 'check', reason: 'Naira share is 0%, target 50%. Rebalancing would move only $0.50.', txHash: '', status: 'skipped', at: '2026-10-15T10:00:00Z', outcome: null } as const;
+    expect(isNoTradeCheck(it0 as never)).toBe(true);
+    expect(checkLine(it0 as never)).toBe('Checked, no trade needed: Naira share is 0%, target 50%. Rebalancing would move only $0.50.');
+    expect(isNoTradeCheck({ ...it0, outcome: 'no_quote' } as never)).toBe(false);
+    expect(matchesFilter(it0 as never, 'all')).toBe(true);
+    expect(matchesFilter(it0 as never, 'executed')).toBe(false);
+  });
+});

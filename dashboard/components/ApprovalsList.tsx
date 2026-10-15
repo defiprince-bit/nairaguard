@@ -8,12 +8,12 @@ import { Skeleton } from './Skeleton';
 import { sendApproveSwap, sendRejectSwap } from '../lib/approve';
 import { getJson } from '../lib/overview';
 import type { ApprovalItem } from '../lib/types';
-import { type FriendlyError, MSG_GENERIC, friendlyError } from '../lib/errors';
+import { type FriendlyError, friendlyError } from '../lib/errors';
 
 /** Approval-specific mapping on top of the shared friendlyError (which logs the raw error). */
 export function friendlyTx(e: unknown): FriendlyError {
   const base = friendlyError(e);
-  if (base.kind === 'cancelled' || base.message !== MSG_GENERIC) return base;
+  if (base.kind === 'cancelled' || !base.generic) return base;
   const err = e as { shortMessage?: string; message?: string };
   const msg = `${err?.shortMessage ?? ''} ${err?.message ?? ''}`;
   if (/ApprovalRejected/.test(msg)) return { kind: 'error', message: 'You already rejected this trade.' };

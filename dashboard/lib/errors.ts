@@ -1,6 +1,10 @@
-export type FriendlyError = { kind: 'error' | 'cancelled'; message: string };
+/** `generic` is set when nothing more specific matched (the message then carries a short raw reason). */
+export type FriendlyError = { kind: 'error' | 'cancelled'; message: string; generic?: true };
 
-export const MSG_FEES = 'Add a little USDC to pay network fees.';
+/** Native gas (CELO) is short. Injected and WalletConnect wallets pay fees in CELO. */
+export const MSG_FEES = 'Add a little CELO to pay network fees.';
+/** MiniPay pays fees in stablecoins (fee-currency); its errors say "fee-currency" / "User not authenticated". */
+export const MSG_FEES_STABLE = 'Add a little USD₮ or USDC to pay network fees.';
 export const MSG_BALANCE = "You don't have enough of this token.";
 export const MSG_CANCELLED = 'You cancelled this in your wallet.';
 export const MSG_VAULT_EXISTS = 'You already have a vault. Taking you to deposit…';
@@ -41,15 +45,49 @@ export function classifyError(e: unknown): FriendlyError {
     || /user rejected|rejected the request|request rejected|denied|user cancel/i.test(text)) {
     return { kind: 'cancelled', message: MSG_CANCELLED };
   }
+  if (names.includes('WrongChainError')) {
+    let cur: unknown = e;
+    for (let i = 0; i < 8 && cur && typeof cur === 'object' && (cur as ErrLike).name !== 'WrongChainError'; i++) cur = (cur as ErrLike).cause;
+    const m = (cur as ErrLike | undefined)?.message;
+    return { kind: 'error', message: typeof m === 'string' && m ? m : 'Switch to the right network in your wallet, then try again.' };
+  }
   if (/0x4239717c|VaultExists/i.test(text)) return { kind: 'error', message: MSG_VAULT_EXISTS };
   if (/timed out waiting for confirmation/i.test(text)) return { kind: 'error', message: MSG_TIMEOUT };
-  if (/0xf4d678b8|InsufficientBalance|exceeds balance|transfer amount exceeds/i.test(text)) {
+  if (/fee-?currency|user not authenticated/i.test(text)) return { kind: 'error', message: MSG_FEES_STABLE };
+  // Token (not gas) shortfalls first: the vault's InsufficientBalance error (case-sensitive) and ERC20 reverts.
+  if (/0xf4d678b8|InsufficientBalance\b/.test(text) || /transfer amount exceeds/i.test(text)) {
     return { kind: 'error', message: MSG_BALANCE };
   }
-  if (/fee-?currency|user not authenticated|insufficient funds|gas required exceeds|funds for gas|for gas \* price|intrinsic gas/i.test(text)) {
-    return { kind: 'error', message: MSG_FEES };
-  }
-  return { kind: 'error', message: MSG_GENERIC };
+  if (isNativeGas(codes, names, text)) return { kind: 'error', message: MSG_FEES };
+  if (/exceeds balance/i.test(text)) return { kind: 'error', message: MSG_BALANCE };
+  const why = shortReason(e);
+  return { kind: 'error', message: why ? `${MSG_GENERIC} (${why})` : MSG_GENERIC, generic: true };
+}
+
+/** Not enough native CELO for gas: viem, geth/-32000, and wallet (OKX, MetaMask) phrasings. */
+const GAS_RE = new RegExp([
+  'insufficient funds', 'funds for gas', 'for gas \\* price', 'gas required exceeds', 'intrinsic gas',
+  'exceeds the balance of the account', // viem InsufficientFundsError
+  'insufficient (?:native |celo )?balance (?:for|to pay) (?:the )?(?:gas|network fee|transaction fee|fee)',
+  'insufficient (?:gas|celo)', 'not enough (?:celo|gas|balance for (?:gas|fee|network fee))',
+  '(?:gas|network) fee[^.]{0,40}(?:insufficient|not enough)',
+].join('|'), 'i');
+
+function isNativeGas(codes: unknown[], names: string[], text: string): boolean {
+  if (names.includes('InsufficientFundsError')) return true;
+  if (GAS_RE.test(text)) return true;
+  const rpc = codes.some((c) => c === -32000 || c === '-32000' || c === -32003 || c === '-32003');
+  return rpc && /insufficient|balance|gas/i.test(text) && !/0xf4d678b8|transfer amount exceeds/i.test(text);
+}
+
+/** viem shortMessage (or message) for diagnosis, first line, trimmed to ~120 chars. */
+export function shortReason(e: unknown, max = 120): string {
+  if (e == null) return '';
+  const x = e as { shortMessage?: unknown; message?: unknown };
+  const raw = typeof e === 'string' ? e : typeof x.shortMessage === 'string' && x.shortMessage ? x.shortMessage
+    : typeof x.message === 'string' ? x.message : '';
+  const one = raw.split('\n')[0].replace(/\s+/g, ' ').trim();
+  return one.length > max ? `${one.slice(0, max - 1).trimEnd()}…` : one;
 }
 
 /** Map a raw wallet/RPC error to a friendly message. Always logs the raw error. */

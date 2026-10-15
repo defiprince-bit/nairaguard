@@ -10,12 +10,13 @@ export type Money = {
 
 export type ActivityItem = {
   id: string;
-  kind: 'swap' | 'deposit' | 'withdraw';
+  /** 'check': the agent looked and decided no trade was needed (reason says why). */
+  kind: 'swap' | 'deposit' | 'withdraw' | 'check';
   in?: Money;
   out?: Money;
   reason: string;
   txHash: string;
-  status: 'pending' | 'confirmed' | 'failed' | 'rejected';
+  status: 'pending' | 'confirmed' | 'failed' | 'rejected' | 'skipped';
   at: string;
   /** Upcoming: the actual amount received (Money or raw base units). Missing → `out` is the min-out ("at least"). */
   amountOut?: Money | string | null;
