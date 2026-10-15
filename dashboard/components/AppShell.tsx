@@ -26,8 +26,8 @@ export function AppShell({
   address: string;
   miniPay: boolean;
   approvalCount?: number;
-  /** Desktop content treatment: 'list' = wide card, 'grid' = 2-column card grid, 'card' = single card. */
-  variant?: 'list' | 'grid' | 'card';
+  /** Desktop content treatment: 'list' = wide card, 'grid' = 2-column card grid, 'card' = single card, 'bare' = no wrapper card (page lays out its own cards). */
+  variant?: 'list' | 'grid' | 'card' | 'bare';
   /** Mobile: the Limits page's original 16px padding instead of the list padding. */
   compact?: boolean;
   children: ReactNode;
