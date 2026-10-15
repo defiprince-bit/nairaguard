@@ -22,11 +22,20 @@ export const metadata: Metadata = {
   },
 };
 
-export const viewport: Viewport = { width: 'device-width', initialScale: 1, themeColor: '#0E7A4F' };
+export const viewport: Viewport = { width: 'device-width', initialScale: 1, themeColor: [
+  { media: '(prefers-color-scheme: dark)', color: '#05140e' },
+  { media: '(prefers-color-scheme: light)', color: '#eef6f1' },
+] };
+
+const THEME_SCRIPT = `(function(){try{var t=localStorage.getItem('ng.theme');if(t!=='light'&&t!=='dark'){t=matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'}document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme='dark'}})()`;
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* Set the theme before first paint so there is no flash of the wrong one. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body>
         <style>{`@keyframes ng-skel{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
         {children}

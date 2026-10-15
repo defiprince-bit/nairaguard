@@ -4,9 +4,9 @@ type Variant = 'primary' | 'secondary' | 'ghost';
 
 const styles: Record<Variant, React.CSSProperties> = {
   primary: {
-    background: 'var(--brand)',
-    color: '#fff',
-    border: '1px solid var(--brand)',
+    background: 'var(--btn-bg)',
+    color: 'var(--btn-ink)',
+    border: '1px solid var(--btn-border)',
   },
   secondary: {
     background: 'var(--surface)',

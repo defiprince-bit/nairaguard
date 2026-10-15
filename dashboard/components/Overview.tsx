@@ -1,5 +1,6 @@
 'use client';
 
+import { ThemeToggle } from './ThemeToggle';
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -191,6 +192,7 @@ export function Overview({ vault, owner, miniPay }: { vault: `0x${string}`; owne
         <header className={s.top}>
           <span className={s.brand}><img src="/icon-v2.svg" alt="" />NairaGuard</span>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <ThemeToggle />
             <span className={`${s.chip} ${s.chipLt}`}>● {NETWORK_LABEL}{miniPay ? ' · MiniPay' : ''}</span>
             <WalletMenu trigger={<span className={s.av} title={owner} aria-label={`Wallet ${shorten(owner)}`}>{initials(owner)}</span>} />
           </div>

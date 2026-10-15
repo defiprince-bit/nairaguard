@@ -33,10 +33,27 @@
 .menuWrap { position: relative; }
 .menuBtn { border: 0; padding: 0; background: none; cursor: pointer; }
 .chipBtn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
-.menu { position: absolute; right: 0; top: calc(100% + 8px); z-index: 40; min-width: 220px; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; box-shadow: var(--shadow-bento); padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+.menu { position: absolute; right: 0; top: calc(100% + 8px); z-index: 40; min-width: 220px; -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px); background: var(--surface-pop); border: 1px solid var(--line); border-radius: 20px; box-shadow: var(--shadow-bento); padding: 8px; display: flex; flex-direction: column; gap: 4px; }
 .menuHead { padding: 8px 10px; font-size: 12.5px; color: var(--ink-muted); }
 .menuHead b { display: block; color: var(--ink-strong); font-size: 14px; }
 .menuItem { text-align: left; border: 0; background: none; padding: 10px; border-radius: 999px; font: inherit; font-size: 14px; font-weight: 600; color: var(--ink-strong); cursor: pointer; }
 .menuItem:hover { background: var(--tile); }
 .danger { color: var(--danger); }
 .switchBar { max-width: 520px; margin: 12px auto 0; padding: 14px 16px; border-radius: var(--radius-bento); background: var(--warn-soft); color: var(--ink-strong); display: flex; flex-direction: column; gap: 10px; }
+
+/* Light theme variant of the connect sheet. Styling only. */
+:global(html[data-theme='light']) .back { background: rgba(6, 38, 26, 0.3); }
+:global(html[data-theme='light']) .sheet { color: #06261a; background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(238, 246, 241, 0.97)); border-color: rgba(6, 38, 26, 0.08); box-shadow: 0 -20px 60px rgba(6, 38, 26, 0.18); }
+:global(html[data-theme='light']) .grab { background: rgba(6, 38, 26, 0.2); }
+:global(html[data-theme='light']) .title { color: #06261a; }
+:global(html[data-theme='light']) .sub,
+:global(html[data-theme='light']) .meta small,
+:global(html[data-theme='light']) .note { color: #3d5a4c; }
+:global(html[data-theme='light']) .x { color: #06261a; border-color: rgba(6, 38, 26, 0.12); background: rgba(6, 38, 26, 0.05); }
+:global(html[data-theme='light']) .opt { color: #06261a; background: rgba(255, 255, 255, 0.75); border-color: rgba(6, 38, 26, 0.1); }
+:global(html[data-theme='light']) .opt:hover:not(:disabled) { background: #ffffff; border-color: rgba(15, 122, 79, 0.4); }
+:global(html[data-theme='light']) .opt:focus-visible,
+:global(html[data-theme='light']) .x:focus-visible { outline-color: #0f7a4f; }
+:global(html[data-theme='light']) .mm { background: rgba(6, 38, 26, 0.08); color: #06261a; }
+:global(html[data-theme='light']) .chev { color: rgba(6, 38, 26, 0.45); }
+:global(html[data-theme='light']) .err { color: #8f1f17; background: rgba(214, 69, 69, 0.1); border-color: rgba(196, 53, 43, 0.3); }

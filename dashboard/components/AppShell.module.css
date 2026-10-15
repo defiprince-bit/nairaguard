@@ -5,17 +5,18 @@
 .deskHead { display: none !important; }
 .main { max-width: 480px; margin: 0 auto; padding: 8px 16px 96px; }
 .main.compact { padding: 16px; }
-.deskTitle { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.03em; color: var(--ink-strong); }
+.deskTitle { margin: 0; font-size: 32px; font-weight: 800; letter-spacing: -0.03em; color: var(--ink-strong); }
 
 @media (min-width: 1000px) {
-  .shell { display: flex; padding-bottom: 0; background: var(--bg-app); min-height: 100dvh; color: var(--ink-strong); }
+  .shell { display: flex; padding-bottom: 0; background: transparent; min-height: 100dvh; color: var(--ink-strong); }
   .body { flex: 1; }
   .mobHead, .mobTitle { display: none; }
   .deskHead { display: flex !important; }
-  .main, .main.compact { max-width: none; margin: 0; padding: 14px 28px 28px 8px; }
+  .main, .main.compact { max-width: none; margin: 0; padding: 18px 28px 28px 0; }
 
   /* Same card look as the Overview bento. */
-  .list, .card { background: var(--surface); border-radius: var(--radius-bento); box-shadow: var(--shadow-bento); padding: 24px; }
+  .list, .card { background: var(--surface); border: 1px solid var(--glass-border); border-radius: var(--radius-bento); box-shadow: var(--shadow-bento); padding: 26px;
+    -webkit-backdrop-filter: blur(30px) saturate(140%); backdrop-filter: blur(30px) saturate(140%); }
   .card { max-width: 720px; }
   .card > p:first-child { margin-top: 0; }
 

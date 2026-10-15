@@ -14,7 +14,7 @@ export function InlineMessage({ err, onDismiss }: { err: Msg; onDismiss?: () => 
         padding: '10px 12px', borderRadius: 12,
         background: cancelled ? 'var(--tile, #f5f7f6)' : 'var(--danger-soft)',
         color: cancelled ? 'var(--ink-muted)' : 'var(--danger)',
-        border: `1px solid ${cancelled ? 'var(--border)' : '#f3c4c0'}`,
+        border: `1px solid ${cancelled ? 'var(--border)' : 'var(--danger-line)'}`,
       }}
     >
       <span className="small" style={{ flex: 1 }}>{err.message}</span>

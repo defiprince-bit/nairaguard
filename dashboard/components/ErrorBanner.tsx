@@ -19,7 +19,7 @@ export function ErrorBanner({
         borderRadius: 'var(--radius-card)',
         background: 'var(--danger-soft)',
         color: 'var(--danger)',
-        border: '1px solid #f3c4c0',
+        border: '1px solid var(--danger-line)',
       }}
     >
       <span className="small" style={{ flex: 1 }}>
