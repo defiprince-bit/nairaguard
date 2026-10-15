@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { decodeFunctionData } from 'viem';
 import { interpretFeed } from './feed.js';
-import { MockRfqClient, mockReactorAbi, parseTextileQuote, TextileRfqClient } from './rfq.js';
+import { effectiveExpiry, MockRfqClient, mockReactorAbi, parseTextileQuote, quoteMaxAgeSec, TextileRfqClient } from './rfq.js';
 
 const VAULT = '0xD436aA344C0E2a58a607443680651a2c32066be6' as const;
 const CNGN = '0xF6829D7393dAe24509eb1E52eE8e572e2E271a4f' as const;
@@ -57,7 +57,7 @@ describe('Sepolia mock RFQ', () => {
     expect(r.target).toBe(REACTOR);
     expect(r.spender).toBe(REACTOR);
     const call = decodeFunctionData({ abi: mockReactorAbi, data: r.data });
-    expect(call.args[0]).toMatchObject({ tokenIn: CNGN, tokenOut: USDT, amountIn: req.sellAmount, amountOut: r.buyAmount, deadline: 1_800_000_030n });
+    expect(call.args[0]).toMatchObject({ tokenIn: CNGN, tokenOut: USDT, amountIn: req.sellAmount, amountOut: r.buyAmount, deadline: 1_800_000_075n });
     const back = await c.request({ ...req, sellToken: USDT, buyToken: CNGN, sellAmount: 10_000_000n });
     if (back.quoted) expect(back.buyAmount).toBe(13_610_000_000n);
   });
@@ -78,5 +78,41 @@ describe('feed', () => {
     expect(interpretFeed(75193n, 8, 1_799_996_399n, now).stale).toBe(true);
     expect(interpretFeed(0n, 8, 1_799_999_880n, now)).toMatchObject({ rateNgnPerUsd: null, stale: true });
     expect(interpretFeed(-1n, 8, 1_799_999_880n, now).stale).toBe(true);
+  });
+});
+
+describe('quote TTL', () => {
+  const rx = new Date(1_800_000_000_000);
+  const body = (expiresAt?: unknown) => ({
+    quote: { takerPays: '1', buyAmount: '2', spender: REACTOR, ...(expiresAt === undefined ? {} : { expiresAt }) },
+    transactions: { swap: { to: REACTOR, data: '0x01' } },
+  });
+  it('QUOTE_MAX_AGE_SEC defaults to 75 and is capped at the 90s TTL', () => {
+    expect(quoteMaxAgeSec({})).toBe(75);
+    expect(quoteMaxAgeSec({ QUOTE_MAX_AGE_SEC: '40' })).toBe(40);
+    expect(quoteMaxAgeSec({ QUOTE_MAX_AGE_SEC: '500' })).toBe(90);
+    expect(quoteMaxAgeSec({ QUOTE_MAX_AGE_SEC: 'x' })).toBe(75);
+  });
+  it('records receivedAt and falls back to the 90s TTL when Textile gives no expiry', () => {
+    const r = parseTextileQuote(body(), rx);
+    if (!r.quoted) throw new Error('expected quote');
+    expect(r.receivedAt).toEqual(rx);
+    expect(r.expiresAt.getTime()).toBe(rx.getTime() + 90_000);
+  });
+  it('takes the earlier of Textile expiry and receivedAt + max age', () => {
+    const early = parseTextileQuote(body(1_800_000_030), rx);
+    if (!early.quoted) throw new Error('expected quote');
+    expect(effectiveExpiry(early, 75).getTime()).toBe(rx.getTime() + 30_000);
+    const late = parseTextileQuote(body(1_800_000_090), rx);
+    if (!late.quoted) throw new Error('expected quote');
+    expect(effectiveExpiry(late, 75).getTime()).toBe(rx.getTime() + 75_000);
+  });
+  it('mock reactor deadline is never later than the usable quote expiry', async () => {
+    const c = new MockRfqClient({ reactor: REACTOR, cngn: CNGN, rateNgnPerUsd: () => 1361, decimals: () => 6, now: () => rx, ttlSec: 20 });
+    const r = await c.request(req);
+    if (!r.quoted) throw new Error('expected quote');
+    const call = decodeFunctionData({ abi: mockReactorAbi, data: r.data });
+    expect(call.args[0].deadline).toBe(1_800_000_020n);
+    expect(BigInt(Math.floor(effectiveExpiry(r).getTime() / 1000))).toBe(1_800_000_020n);
   });
 });
