@@ -28,7 +28,7 @@
 .ag { background: linear-gradient(140deg, #7df0b0, #c6f36b); border-color: transparent; color: #06261a; box-shadow: 0 20px 50px rgba(155, 232, 106, 0.22); }
 .ag .h3, .ag .st { color: #06261a; }
 .ag .sub { color: rgba(6, 38, 26, 0.78); }
-.ag .kv div { background: rgba(6, 38, 26, 0.08); color: rgba(6, 38, 26, 0.75); }
+.ag .kv div { background: rgba(6, 38, 26, 0.14); color: rgba(6, 38, 26, 0.78); }
 .ag .kv b { color: #06261a; }
 .ag .chipLt { background: rgba(6, 38, 26, 0.12); color: #06261a; border-color: transparent; }
 .ag .dot { background: #06261a; outline-color: rgba(6, 38, 26, 0.18); }
