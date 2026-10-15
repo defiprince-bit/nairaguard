@@ -5,6 +5,7 @@ import { Button } from './Button';
 import { ErrorBanner } from './ErrorBanner';
 import { Skeleton } from './Skeleton';
 import { ConnectSheet } from './ConnectSheet';
+import g from './ConnectGate.module.css';
 import { SwitchNetworkBar, WalletMenu } from './WalletMenu';
 import { CHAIN_NAME, shorten, switchToAppChain, useWallet } from '../lib/wallet';
 
@@ -37,32 +38,25 @@ export function WalletGate({ children, bare }: { children: (address: string, min
 
   if (!address) {
     return (
-      <div
-        style={{
-          maxWidth: 480,
-          margin: '0 auto',
-          padding: '48px 16px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 16,
-        }}
-      >
-        <h1 className="h1" style={{ margin: 0 }}>
-          Connect your wallet
-        </h1>
-        <p style={{ margin: 0, color: 'var(--ink-muted)' }}>
-          {miniPay
-            ? 'MiniPay is ready. Tap below if your wallet did not connect automatically.'
-            : 'Connect Valora, MetaMask or another Celo wallet. On your phone, MiniPay is the quickest way in.'}
-        </p>
-        {error ? <ErrorBanner message={error} onRetry={() => setError(null)} /> : null}
-        {!miniPay ? (
-          <Button fullWidth onClick={() => setSheet(true)}>Connect wallet</Button>
-        ) : (
-          <Button fullWidth onClick={connect} disabled={connecting}>
-            {connecting ? 'Connecting…' : 'Retry MiniPay connect'}
-          </Button>
-        )}
+      <div className={g.screen}>
+        <div className={g.card}>
+          <img src="/icon-v2.svg" alt="" width={68} height={68} className={g.icon} />
+          <h1 className={g.title}>Connect your wallet</h1>
+          <p className={g.sub}>
+            {miniPay
+              ? 'MiniPay is ready. Tap below if your wallet did not connect automatically.'
+              : 'Connect Valora, MetaMask or another Celo wallet. On your phone, MiniPay is the quickest way in.'}
+          </p>
+          {error ? <ErrorBanner message={error} onRetry={() => setError(null)} /> : null}
+          {!miniPay ? (
+            <Button fullWidth className={g.cta} onClick={() => setSheet(true)}>Connect wallet</Button>
+          ) : (
+            <Button fullWidth className={g.cta} onClick={connect} disabled={connecting}>
+              {connecting ? 'Connecting…' : 'Retry MiniPay connect'}
+            </Button>
+          )}
+          <p className={g.note}>Non-custodial · withdraw anytime</p>
+        </div>
         {sheet && !miniPay ? <ConnectSheet onClose={() => setSheet(false)} /> : null}
       </div>
     );

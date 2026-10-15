@@ -1,0 +1,20 @@
+/* iOS-style connect screen (mockup: nairaguard-brand/mockups/connect-ios). Styling only. */
+.screen { position: relative; min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 48px 16px; overflow: hidden;
+  background: radial-gradient(120% 90% at 70% 0%, #1d6b47 0%, #0b2f20 45%, #05140e 100%); color: #f2fbf6; }
+.screen::before, .screen::after { content: ''; position: absolute; border-radius: 50%; filter: blur(80px); pointer-events: none; }
+.screen::before { width: 420px; height: 420px; left: -120px; top: -80px; background: rgba(125, 240, 176, 0.18); }
+.screen::after { width: 380px; height: 380px; right: -100px; bottom: -120px; background: rgba(198, 243, 107, 0.16); }
+.card { position: relative; z-index: 1; width: 100%; max-width: 440px; padding: 36px 32px 24px; display: flex; flex-direction: column; gap: 16px;
+  background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 36px;
+  -webkit-backdrop-filter: blur(24px) saturate(140%); backdrop-filter: blur(24px) saturate(140%);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08); }
+.icon { width: 68px; height: 68px; border-radius: 18px; box-shadow: 0 0 32px rgba(198, 243, 107, 0.35), 0 8px 24px rgba(0, 0, 0, 0.4); }
+.title { margin: 0; font-size: 28px; line-height: 1.15; font-weight: 700; letter-spacing: -0.02em; color: #ffffff; }
+.sub { margin: 0; font-size: 15px; line-height: 1.5; color: rgba(242, 251, 246, 0.78); }
+.cta { min-height: 52px !important; border-radius: 999px !important; border: 0 !important; font-size: 16px; color: #0b1f17 !important;
+  background: linear-gradient(90deg, #7df0b0, #c6f36b) !important; box-shadow: 0 10px 30px rgba(166, 243, 120, 0.3); transition: transform .15s ease, box-shadow .15s ease; }
+.cta:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 14px 36px rgba(166, 243, 120, 0.4); }
+.cta:focus-visible { outline: 3px solid #ffffff; outline-offset: 3px; }
+.note { margin: 4px 0 0; font-size: 12.5px; text-align: center; color: rgba(242, 251, 246, 0.6); }
+@media (max-width: 480px) { .card { padding: 32px 22px 22px; border-radius: 32px; } .title { font-size: 26px; } }
+@media (prefers-reduced-motion: reduce) { .cta { transition: none; } }
