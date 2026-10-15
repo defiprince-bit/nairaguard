@@ -1,4 +1,6 @@
-.wrap { display: grid; gap: 16px; padding-bottom: 88px; }
+.wrap { display: grid; gap: 16px;
+  /* Clear sticky Save (~60px) + pill nav (~72px) + home indicator so the last row scrolls fully above them. */
+  padding-bottom: calc(60px + 72px + env(safe-area-inset-bottom, 0px)); }
 .card { background: var(--surface); border: 1px solid var(--glass-border, var(--border)); border-radius: var(--radius-bento); box-shadow: var(--shadow-bento);
   padding: 20px; -webkit-backdrop-filter: blur(30px) saturate(140%); backdrop-filter: blur(30px) saturate(140%); color: var(--ink-strong); }
 .card h2 { margin: 0 0 4px; font-size: 18px; font-weight: 750; letter-spacing: -0.01em; }
@@ -33,7 +35,11 @@
 .how li { padding: 12px 14px; border-radius: 14px; background: var(--tile); font-size: 14px; color: var(--ink-soft); line-height: 1.45; }
 .how b { color: var(--ink-strong); }
 .msgs { display: grid; gap: 10px; }
-.save { position: sticky; bottom: 84px; z-index: 5; display: grid; gap: 8px; }
+.save { position: sticky; bottom: calc(84px + env(safe-area-inset-bottom, 0px)); z-index: 5; display: grid; gap: 8px;
+  padding: 10px 8px; border-radius: 20px;
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  border: 1px solid var(--glass-border, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(140%); backdrop-filter: blur(20px) saturate(140%); }
 .saveBtn { min-height: 52px; width: 100%; border: 0; border-radius: 999px; background: linear-gradient(135deg, #7df0b0, #c6f36b); color: #06261a;
   font: inherit; font-size: 16px; font-weight: 800; cursor: pointer; box-shadow: 0 10px 30px rgba(125, 240, 176, .35); }
 .saveBtn:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
@@ -43,5 +49,6 @@
   .wrap { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: start; gap: 18px; padding-bottom: 0; }
   .card { padding: 26px; }
   .msgs, .save { grid-column: 1 / -1; }
-  .save { bottom: 18px; justify-self: end; width: 340px; }
+  .save { bottom: 18px; justify-self: end; width: 340px; padding: 0; background: transparent; border: 0;
+    -webkit-backdrop-filter: none; backdrop-filter: none; border-radius: 0; }
 }
