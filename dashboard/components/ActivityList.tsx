@@ -85,7 +85,7 @@ export function ActivityList({ vault }: { vault: `0x${string}` }) {
               borderRadius: 999,
               border: '1px solid var(--border)',
               background: filter === f.id ? 'var(--brand)' : 'var(--surface)',
-              color: filter === f.id ? '#fff' : 'var(--ink)',
+              color: filter === f.id ? 'var(--on-brand)' : 'var(--ink)',
               fontWeight: 600,
             }}
           >

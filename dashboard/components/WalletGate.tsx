@@ -1,5 +1,6 @@
 'use client';
 
+import { ThemeToggle } from './ThemeToggle';
 import { Fragment, ReactNode, useEffect, useState } from 'react';
 import { Button } from './Button';
 import { ErrorBanner } from './ErrorBanner';
@@ -39,6 +40,7 @@ export function WalletGate({ children, bare }: { children: (address: string, min
   if (!address) {
     return (
       <div className={g.screen}>
+        <ThemeToggle className={g.toggle} />
         <header className={`${g.topbar} ${g.desk}`}>
           <img src="/logo-v2.svg" alt="" width={40} height={40} />
           <span>NairaGuard</span>
@@ -114,6 +116,8 @@ export function WalletGate({ children, bare }: { children: (address: string, min
           <img src="/logo-v2.svg" alt="" width={28} height={28} style={{ borderRadius: 8 }} />
           <strong style={{ color: 'var(--brand)' }}>NairaGuard</strong>
         </span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+        <ThemeToggle />
         <WalletMenu
           trigger={
             <span className="small" style={{ color: 'var(--ink-muted)' }}>
@@ -123,6 +127,7 @@ export function WalletGate({ children, bare }: { children: (address: string, min
             </span>
           }
         />
+        </span>
       </header>
       <Fragment key={address}>{children(address, miniPay)}</Fragment>
     </div>

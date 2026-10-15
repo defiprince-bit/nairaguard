@@ -15,7 +15,7 @@ export function Skeleton({
         width,
         height,
         borderRadius: radius,
-        background: 'linear-gradient(90deg, var(--border) 25%, #f0f2ef 50%, var(--border) 75%)',
+        background: 'linear-gradient(90deg, var(--border) 25%, var(--skel-hi) 50%, var(--border) 75%)',
         backgroundSize: '200% 100%',
         animation: 'ng-skel 1.2s ease-in-out infinite',
       }}

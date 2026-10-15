@@ -1,5 +1,6 @@
 'use client';
 
+import { ThemeToggle } from './ThemeToggle';
 import { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -54,6 +55,8 @@ export function AppShell({
             <img src="/logo-v2.svg" alt="" width={28} height={28} style={{ borderRadius: 8 }} />
             <strong style={{ color: 'var(--brand)' }}>NairaGuard</strong>
           </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <ThemeToggle />
           <WalletMenu
             trigger={
               <span className="small" style={{ color: 'var(--ink-muted)' }}>
@@ -63,12 +66,14 @@ export function AppShell({
               </span>
             }
           />
+          </span>
         </header>
 
         {/* Desktop top bar (same as Overview). */}
         <header className={`${o.top} ${s.deskHead}`}>
           <h1 className={s.deskTitle}>{title}</h1>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <ThemeToggle />
             <span className={`${o.chip} ${o.chipLt}`}>● {NETWORK_LABEL}{miniPay ? ' · MiniPay' : ''}</span>
             <WalletMenu trigger={<span className={o.av} title={owner} aria-label={`Wallet ${shorten(owner)}`}>{initials(owner)}</span>} />
           </div>

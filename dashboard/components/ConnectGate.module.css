@@ -44,3 +44,26 @@
   .mp p { margin: 0; font-size: 14px; line-height: 1.45; color: rgba(242, 251, 246, 0.78); }
   .mp strong { color: #fff; }
 }
+
+/* Light theme variant (html[data-theme='light']). Styling only. */
+:global(html[data-theme='light']) .screen { background: radial-gradient(120% 90% at 70% 0%, #dff3e7 0%, #eef6f1 55%, #f4f9f5 100%); color: #06261a; }
+:global(html[data-theme='light']) .screen::before { background: rgba(15, 122, 79, 0.16); }
+:global(html[data-theme='light']) .screen::after { background: rgba(198, 243, 107, 0.35); }
+:global(html[data-theme='light']) .card { background: rgba(255, 255, 255, 0.7); border-color: rgba(6, 38, 26, 0.08); box-shadow: 0 30px 80px rgba(6, 38, 26, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.9); }
+:global(html[data-theme='light']) .icon { box-shadow: 0 0 28px rgba(155, 232, 106, 0.45), 0 8px 20px rgba(6, 38, 26, 0.15); }
+:global(html[data-theme='light']) .title,
+:global(html[data-theme='light']) .topbar,
+:global(html[data-theme='light']) .headline,
+:global(html[data-theme='light']) .mp strong { color: #06261a; }
+:global(html[data-theme='light']) .sub,
+:global(html[data-theme='light']) .lede,
+:global(html[data-theme='light']) .mp p { color: #3d5a4c; }
+:global(html[data-theme='light']) .note,
+:global(html[data-theme='light']) .feat span { color: #3d5a4c; }
+:global(html[data-theme='light']) .feat { background: rgba(255, 255, 255, 0.6); border-color: rgba(6, 38, 26, 0.08); }
+:global(html[data-theme='light']) .feat b { color: #0f7a4f; }
+:global(html[data-theme='light']) .headline em { background: linear-gradient(135deg, #0f7a4f, #4fae2a); -webkit-background-clip: text; background-clip: text; }
+:global(html[data-theme='light']) .mp { border-top-color: rgba(6, 38, 26, 0.1); }
+:global(html[data-theme='light']) .cta:focus-visible { outline-color: #0f7a4f; }
+.toggle { position: absolute; top: 16px; right: 16px; z-index: 2; }
+@media (min-width: 1024px) { .toggle { top: 26px; right: 72px; } }
