@@ -6,7 +6,7 @@ import {
 import type { FeedReading } from './feed.js';
 import { decide, type StrategyDecision } from './strategy.js';
 import { logQuote, valueNgn, type Decimals } from './pnl.js';
-import type { RfqClient } from './rfq.js';
+import { effectiveExpiry, quoteMaxAgeSec, type RfqClient } from './rfq.js';
 import type { RateSource } from './textile.js';
 import { buildContractCall, type TaggedTx } from './txBuilder.js';
 import { vaultAbi } from './vaultAbi.js';
@@ -63,6 +63,8 @@ export type LoopDeps = {
   rfq: RfqClient;
   db: Db;
   now?: () => Date;
+  /** Max quote age before send (s). Defaults to QUOTE_MAX_AGE_SEC / 75. */
+  quoteMaxAgeSec?: number;
   bandBps?: number;
   rejectCooldownMs?: number;
 };
@@ -213,12 +215,14 @@ async function rfqSwap(
     return note(NO_OFFER, 'no_quote');
   }
 
+  // Measure staleness from receipt, capped by the venue expiry (Textile: 90s TTL, we stop at QUOTE_MAX_AGE_SEC).
+  const usableUntil = effectiveExpiry({ expiresAt: quote.expiresAt, receivedAt: quote.receivedAt ?? now }, d.quoteMaxAgeSec ?? quoteMaxAgeSec());
   const inN = toNum(quote.takerPays, dIn);
   const outN = toNum(quote.buyAmount, dOut);
   const qRate = ngnToUsd ? (outN > 0 ? inN / outN : 0) : (inN > 0 ? outN / inN : 0);
   const quoted = {
     ...base, quoted: true, takerPays: quote.takerPays.toString(), buyAmount: quote.buyAmount.toString(),
-    rate: qRate, expiresAt: quote.expiresAt,
+    rate: qRate, expiresAt: usableUntil,
   };
   const decline = async (outcome: RfqOutcome, why: string, activity: string) => {
     await insertRfqQuote(d.db, { chainId: d.chainId, ...quoted, outcome, outcomeReason: why });
@@ -234,7 +238,12 @@ async function rfqSwap(
   if (q.approvedMinOut !== undefined && quote.buyAmount < q.approvedMinOut) {
     return decline('price_moved', 'below_approved_min_out', "Price moved, didn't trade.");
   }
-  if (quote.expiresAt.getTime() <= now.getTime()) return decline('expired', 'expired_before_send', 'The offer expired before it could be used.');
+  // Fresh clock: the allowlist/floor reads above take time. Stale → log expired; the next tick re-quotes once.
+  const sendAt = d.now?.() ?? new Date();
+  if (usableUntil.getTime() <= sendAt.getTime()) {
+    const why = quote.expiresAt.getTime() <= sendAt.getTime() ? 'expired_before_send' : 'stale_quote';
+    return decline('expired', why, 'The offer expired before it could be used. Will ask again next check.');
+  }
 
   // The agent signs this tx (tagged), the vault is the taker. Never a user-signed order for a third-party filler.
   const tx = buildContractCall({

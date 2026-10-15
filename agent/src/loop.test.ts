@@ -204,6 +204,29 @@ describe('RFQ swap (below threshold)', () => {
     expect(chain.sent).toHaveLength(0);
   });
 
+  it('logs a quote older than the max age as expired (stale) and does not send, then re-quotes once next tick', async () => {
+    const rfq = new FakeRfq();
+    rfq.next = { quoted: true, takerPays: e6(1), buyAmount: e6(1), spender: REACTOR, target: REACTOR, data: '0x',
+      expiresAt: new Date(NOW.getTime() + 60_000), receivedAt: new Date(NOW.getTime() - 76_000) };
+    const chain = new FakeChain(state());
+    expect((await runOnce(deps(chain, rfq))).outcome).toBe('expired');
+    expect(chain.sent).toHaveLength(0);
+    expect(rfq.reqs).toHaveLength(1);
+    expect((await quotes())[0]).toMatchObject({ outcome: 'expired', outcome_reason: 'stale_quote' });
+    rfq.next = undefined;
+    expect((await runOnce(deps(chain, rfq))).outcome).toBe('filled');
+    expect(rfq.reqs).toHaveLength(2);
+  });
+
+  it('honours a lower QUOTE_MAX_AGE_SEC via deps and records the effective expiry', async () => {
+    const rfq = new FakeRfq();
+    rfq.next = { quoted: true, takerPays: e6(1), buyAmount: e6(1), spender: REACTOR, target: REACTOR, data: '0x',
+      expiresAt: new Date(NOW.getTime() + 80_000), receivedAt: new Date(NOW.getTime() - 10_000) };
+    const chain = new FakeChain(state());
+    expect((await runOnce({ ...deps(chain, rfq), quoteMaxAgeSec: 5 })).outcome).toBe('expired');
+    expect(chain.sent).toHaveLength(0);
+  });
+
   it('logs expired with the tx hash when the swap tx reverts', async () => {
     const chain = new FakeChain(state());
     chain.status = 'reverted';

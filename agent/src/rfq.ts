@@ -8,7 +8,10 @@ export type RfqQuote = {
   spender: `0x${string}`;
   target: `0x${string}`;
   data: `0x${string}`;
+  /** Venue expiry (Textile: ~90s TTL on Celo). */
   expiresAt: Date;
+  /** When the agent received the quote. Staleness is measured from here. */
+  receivedAt?: Date;
 };
 export type RfqNoQuote = { quoted: false; reason: string };
 export type RfqResult = RfqQuote | RfqNoQuote;
@@ -29,6 +32,24 @@ export interface RfqClient {
 
 export const TEXTILE_API = 'https://api.textilecredit.com';
 
+/** Textile confirmed Celo RFQ quotes live 90s. No max size beyond available liquidity. */
+export const TEXTILE_QUOTE_TTL_SEC = 90;
+export const DEFAULT_QUOTE_MAX_AGE_SEC = 75;
+
+/** Max age (s) before the agent refuses to submit a quote. QUOTE_MAX_AGE_SEC, default 75, never above the 90s TTL. */
+export function quoteMaxAgeSec(env: Record<string, string | undefined> = process.env): number {
+  const n = Number(env.QUOTE_MAX_AGE_SEC);
+  if (!env.QUOTE_MAX_AGE_SEC || !Number.isFinite(n) || n <= 0) return DEFAULT_QUOTE_MAX_AGE_SEC;
+  return Math.min(n, TEXTILE_QUOTE_TTL_SEC);
+}
+
+/** The earlier of the venue's expiry and receivedAt + maxAge. Past this the quote must not be sent. */
+export function effectiveExpiry(q: Pick<RfqQuote, 'expiresAt' | 'receivedAt'>, maxAgeSec = quoteMaxAgeSec()): Date {
+  const venue = q.expiresAt.getTime();
+  if (!q.receivedAt) return new Date(venue);
+  return new Date(Math.min(venue, q.receivedAt.getTime() + maxAgeSec * 1000));
+}
+
 type Fetch = (url: string, init: { method: string; headers: Record<string, string>; body: string; signal?: AbortSignal }) =>
   Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
 
@@ -43,7 +64,8 @@ export class TextileRfqClient implements RfqClient {
     private readonly apiKey: string | undefined = process.env.TEXTILE_API_KEY,
     private readonly fetchFn: Fetch = fetch as unknown as Fetch,
     private readonly baseUrl = TEXTILE_API,
-    private readonly timeoutMs = 75_000,
+    private readonly timeoutMs = 30_000,
+    private readonly now: () => Date = () => new Date(),
   ) {}
 
   async request(req: RfqRequest): Promise<RfqResult> {
@@ -62,7 +84,7 @@ export class TextileRfqClient implements RfqClient {
       });
       const body = (await res.json().catch(() => ({}))) as Record<string, any>;
       if (!res.ok) return { quoted: false, reason: `http_${res.status}${body?.error ? `:${String(body.error).slice(0, 80)}` : ''}` };
-      return parseTextileQuote(body);
+      return parseTextileQuote(body, this.now());
     } catch (e) {
       return { quoted: false, reason: (e as Error).name === 'AbortError' ? 'timeout' : 'request_failed' };
     } finally {
@@ -72,14 +94,18 @@ export class TextileRfqClient implements RfqClient {
 }
 
 /** Parse a /v2/rfq/request body. Anything missing → no_quote (no depth is a normal outcome). */
-export function parseTextileQuote(body: Record<string, any>): RfqResult {
+export function parseTextileQuote(body: Record<string, any>, receivedAt: Date = new Date()): RfqResult {
   if (body?.status === 'no_quote' || !body?.quote) return { quoted: false, reason: 'no_depth' };
   const q = body.quote;
   const swap = body.transactions?.swap;
-  if (!q.takerPays || !q.buyAmount || !q.spender || !swap?.to || !swap?.data || !q.expiresAt) {
+  if (!q.takerPays || !q.buyAmount || !q.spender || !swap?.to || !swap?.data) {
     return { quoted: false, reason: 'malformed_quote' };
   }
-  const exp = typeof q.expiresAt === 'number' ? new Date(q.expiresAt < 1e12 ? q.expiresAt * 1000 : q.expiresAt) : new Date(q.expiresAt);
+  // No expiry in the response → assume the confirmed 90s TTL from receipt.
+  const ttlExp = new Date(receivedAt.getTime() + TEXTILE_QUOTE_TTL_SEC * 1000);
+  const exp = q.expiresAt == null ? ttlExp
+    : typeof q.expiresAt === 'number' ? new Date(q.expiresAt < 1e12 ? q.expiresAt * 1000 : q.expiresAt) : new Date(q.expiresAt);
+  if (Number.isNaN(exp.getTime())) return { quoted: false, reason: 'malformed_quote' };
   return {
     quoted: true,
     takerPays: BigInt(q.takerPays),
@@ -88,6 +114,7 @@ export function parseTextileQuote(body: Record<string, any>): RfqResult {
     target: swap.to,
     data: swap.data,
     expiresAt: exp,
+    receivedAt,
   };
 }
 
@@ -109,6 +136,7 @@ export class MockRfqClient implements RfqClient {
       rateNgnPerUsd: () => Promise<number> | number;
       decimals: (token: `0x${string}`) => number;
       ttlSec?: number;
+      maxAgeSec?: number;
       now?: () => Date;
       /** Return false to simulate "no offer right now". */
       hasDepth?: () => boolean;
@@ -126,17 +154,19 @@ export class MockRfqClient implements RfqClient {
     const scaled = (req.sellAmount * 10n ** BigInt(dOut)) / 10n ** BigInt(dIn);
     const buyAmount = sellingNgn ? (scaled * 1_000_000n) / rateE6 : (scaled * rateE6) / 1_000_000n;
     const now = this.o.now?.() ?? new Date();
-    const expiresAt = new Date(now.getTime() + (this.o.ttlSec ?? 30) * 1000);
+    const expiresAt = new Date(now.getTime() + (this.o.ttlSec ?? TEXTILE_QUOTE_TTL_SEC) * 1000);
+    // On-chain deadline never later than the quote's usable expiry.
+    const deadlineAt = effectiveExpiry({ expiresAt, receivedAt: now }, this.o.maxAgeSec ?? quoteMaxAgeSec());
     const data = encodeFunctionData({
       abi: mockReactorAbi,
       functionName: 'fill',
       args: [{
         tokenIn: req.sellToken, tokenOut: req.buyToken, amountIn: req.sellAmount, amountOut: buyAmount,
-        deadline: BigInt(Math.floor(expiresAt.getTime() / 1000)),
+        deadline: BigInt(Math.floor(deadlineAt.getTime() / 1000)),
       }],
     });
     return {
-      quoted: true, takerPays: req.sellAmount, buyAmount, spender: this.o.reactor, target: this.o.reactor, data, expiresAt,
+      quoted: true, takerPays: req.sellAmount, buyAmount, spender: this.o.reactor, target: this.o.reactor, data, expiresAt, receivedAt: now,
     };
   }
 }
