@@ -1,18 +1,19 @@
-.wrap { display: grid; gap: 16px;
-  /* Clear sticky Save (~60px) + pill nav (~72px) + home indicator so the last row scrolls fully above them. */
-  padding-bottom: calc(60px + 72px + env(safe-area-inset-bottom, 0px)); }
+.wrap { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px;
+  /* The legal footer and the shell's bottom padding now follow the form, so at full scroll the sticky Save
+     bar rests in flow above the pill nav and never covers the last row. */
+  padding-bottom: 8px; }
 .card { background: var(--surface); border: 1px solid var(--glass-border, var(--border)); border-radius: var(--radius-bento); box-shadow: var(--shadow-bento);
   padding: 20px; -webkit-backdrop-filter: blur(30px) saturate(140%); backdrop-filter: blur(30px) saturate(140%); color: var(--ink-strong); }
 .card h2 { margin: 0 0 4px; font-size: 18px; font-weight: 750; letter-spacing: -0.01em; }
-.sub { margin: 0 0 16px; color: var(--ink-muted); font-size: 14px; }
-.seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 4px; border-radius: 999px; background: var(--tile-2); border: 1px solid var(--border); margin-bottom: 8px; }
-.seg button { min-height: 44px; border: 0; border-radius: 999px; background: transparent; color: var(--ink-muted); font: inherit; font-weight: 650; cursor: pointer; }
+.sub { margin: 0 0 16px; color: var(--ink-muted); font-size: 16px; line-height: 1.45; }
+.seg { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 999px; background: var(--tile-2); border: 1px solid var(--border); margin-bottom: 8px; }
+.seg button { min-width: 0; padding: 0 2px; white-space: nowrap; min-height: 44px; border: 0; border-radius: 999px; background: transparent; color: var(--ink-muted); font: inherit; font-weight: 650; cursor: pointer; }
 .seg button[aria-checked='true'] { background: var(--surface-pop, var(--surface)); color: var(--ink-strong); box-shadow: 0 2px 10px rgba(0,0,0,.12); }
 .seg button.customOn[aria-checked='true'] { background: var(--brand-soft); color: var(--brand); }
 .seg button:disabled { cursor: default; }
-.blurb { margin: 0 0 18px; font-size: 13px; color: var(--ink-faint); min-height: 18px; }
+.blurb { margin: 0 0 18px; font-size: 14px; color: var(--ink-faint); min-height: 18px; }
 .field { display: grid; gap: 6px; margin-bottom: 14px; }
-.field label { font-weight: 650; font-size: 14px; }
+.field label { font-weight: 650; font-size: 16px; }
 .hint { font-size: 12px; color: var(--ink-faint); }
 .inBox { display: flex; align-items: center; min-height: 48px; border-radius: 14px; background: var(--tile); border: 1px solid var(--border); padding: 0 14px; }
 .inBox:focus-within { outline: 2px solid var(--focus, var(--brand)); outline-offset: 1px; }
@@ -20,7 +21,7 @@
 .inBox span { color: var(--ink-muted); font-weight: 650; margin-right: 4px; }
 .inBox input { flex: 1; min-width: 0; min-height: 44px; border: 0; background: transparent; color: var(--ink-strong); font: inherit; font-size: 17px; font-weight: 650; outline: none; }
 .err { font-size: 13px; color: var(--danger); margin: 0; }
-.ro { display: flex; justify-content: space-between; align-items: center; min-height: 44px; padding: 0 14px; border-radius: 14px; background: var(--tile); color: var(--ink-muted); font-size: 14px; }
+.ro { display: flex; justify-content: space-between; align-items: center; min-height: 44px; padding: 0 14px; border-radius: 14px; background: var(--tile); color: var(--ink-muted); font-size: 16px; gap: 12px; }
 .ro b { color: var(--ink-strong); }
 .mixRow { display: flex; gap: 18px; align-items: center; margin-bottom: 14px; }
 .ring { flex: none; }
@@ -32,7 +33,7 @@
 .bar i { display: block; background: var(--brand); transition: width .2s; }
 .bar u { display: block; flex: 1; background: var(--usd); opacity: .75; }
 .how { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-.how li { padding: 12px 14px; border-radius: 14px; background: var(--tile); font-size: 14px; color: var(--ink-soft); line-height: 1.45; }
+.how li { padding: 12px 14px; border-radius: 14px; background: var(--tile); font-size: 16px; color: var(--ink-soft); line-height: 1.45; }
 .how b { color: var(--ink-strong); }
 .msgs { display: grid; gap: 10px; }
 .save { position: sticky; bottom: calc(84px + env(safe-area-inset-bottom, 0px)); z-index: 5; display: grid; gap: 8px;
@@ -44,6 +45,14 @@
   font: inherit; font-size: 16px; font-weight: 800; cursor: pointer; box-shadow: 0 10px 30px rgba(125, 240, 176, .35); }
 .saveBtn:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
 .saveBtn:focus-visible, .seg button:focus-visible { outline: 2px solid var(--focus, var(--brand)); outline-offset: 2px; }
+
+/* Small phones (MiniPay at 360px): segment labels fit four across. */
+@media (max-width: 429px) {
+  .card { padding: 18px 16px; }
+  .seg button { font-size: 14px; }
+  .mixRow { gap: 14px; }
+  .mixLabel { font-size: 20px; }
+}
 
 @media (min-width: 1000px) {
   .wrap { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: start; gap: 18px; padding-bottom: 0; }

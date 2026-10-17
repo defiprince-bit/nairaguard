@@ -47,7 +47,7 @@ export function TradeRow({ item }: { item: ActivityItem }) {
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
-        <strong className="h2" style={{ margin: 0, fontSize: 15 }}>
+        <strong className="h2" style={{ margin: 0, fontSize: 16 }}>
           {title(item)}
         </strong>
         <StatusChip status={mapStatus(item.status)} />

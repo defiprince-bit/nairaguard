@@ -138,7 +138,7 @@ export function LimitsScreen({ owner, vault }: { owner: `0x${string}`; vault: `0
           onChange={(e) => { setForm({ ...form, targetPct: Number(e.target.value) }); setNote(null); }} />
         <div className={s.ends}><span>All dollars</span><span>All naira</span></div>
         <div className={s.bar} aria-hidden><i style={{ width: `${ngn}%` }} /><u /></div>
-        <h2 style={{ fontSize: 15 }}>How your agent behaves</h2>
+        <h2 style={{ fontSize: 17 }}>How your agent behaves</h2>
         <ul className={s.how}>
           <li>Keeps about <b>{ngn}% in naira</b> and <b>{usd}% in USD₮</b>, swapping when the mix drifts.</li>
           <li>Swaps up to <b>{fmt(form.maxTrade)}</b> at a time and <b>{fmt(form.maxDaily)}</b> a day.</li>
