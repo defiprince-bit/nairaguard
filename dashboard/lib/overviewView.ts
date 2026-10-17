@@ -34,8 +34,16 @@ export function pnlPct(pnlNgn: number, valueNgn: number): number | null {
   return (pnlNgn / base) * 100;
 }
 
-/** True unless the app is built for Celo mainnet (NEXT_PUBLIC_NETWORK=celo). Display only. */
-export function isTestnet(network: string | undefined = process.env.NEXT_PUBLIC_NETWORK): boolean {
+export const CELO_MAINNET_CHAIN_ID = 42220;
+
+/**
+ * Testnet unless the vault's chain is Celo mainnet (42220). Display only.
+ * `chainId` is the vault's chain (API data, else the connected wallet's chain). Any known chain
+ * other than 42220 is testnet. Only when no chain ID is available yet does the build env decide,
+ * and even then it is mainnet only for exactly `celo`.
+ */
+export function isTestnet(chainId?: number | null, network: string | undefined = process.env.NEXT_PUBLIC_NETWORK): boolean {
+  if (typeof chainId === 'number' && Number.isFinite(chainId)) return chainId !== CELO_MAINNET_CHAIN_ID;
   return network !== 'celo';
 }
 

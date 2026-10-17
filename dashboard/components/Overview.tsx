@@ -15,7 +15,7 @@ import { REJECT_HELPER, sendApproveSwap, sendRejectSwap } from '../lib/approve';
 import { APPROVE_HELPER, approvalRate, approvalView, noRate, formatCountdown, lastCheck, msLeft, officialRateLine, pausedLine, tradeOut, txUrl, venueLine } from '../lib/format';
 import { loadOverview, type OverviewBalances } from '../lib/overview';
 import { type ApiLimits, isTestnet, pnlPct, presetFor, ringDash, signedMoney, splitAmount, usd18 } from '../lib/overviewView';
-import { shorten } from '../lib/wallet';
+import { shorten, useWallet } from '../lib/wallet';
 import { WalletAvatar } from './AvatarPicker';
 import { WalletMenu } from './WalletMenu';
 import { FACTORY_ADDRESS } from '../lib/vault';
@@ -23,8 +23,6 @@ import type { ActivityItem, AgentStatus, ApprovalItem } from '../lib/types';
 
 type Cur = 'NGN' | 'USD';
 const NETWORK_LABEL = process.env.NEXT_PUBLIC_NETWORK === 'celo' ? 'Celo' : 'Celo Sepolia';
-/** Testnet (Celo Sepolia, mock tokens): the savings card shows a label instead of a % / ₦ gain. */
-const testnet = isTestnet();
 
 function agentLine(agent: AgentStatus | null, vaultCheckedAt?: string | null, vaultOk?: boolean | null) {
   if (!agent && !vaultCheckedAt) return null;
@@ -105,6 +103,10 @@ function ApprovalBanner({ item, owner, vault, onDone }: { item: ApprovalItem; ow
 
 export function Overview({ vault, owner, miniPay }: { vault: `0x${string}`; owner: `0x${string}`; miniPay?: boolean }) {
   const path = usePathname();
+  // Testnet (mock tokens) → the savings card shows a label instead of a % / ₦ gain. The vault API data
+  // carries no chain ID, so this reads the connected wallet's chain (read-only); env only until it's known.
+  const { chainId: walletChainId } = useWallet();
+  const testnet = isTestnet(walletChainId);
   const [balances, setBalances] = useState<OverviewBalances | null>(null);
   const [activity, setActivity] = useState<ActivityItem[] | null>(null);
   const [approvals, setApprovals] = useState<ApprovalItem[] | null>(null);
