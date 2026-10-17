@@ -245,7 +245,7 @@ export function Overview({ vault, owner, miniPay }: { vault: `0x${string}`; owne
           {/* Saved vs holding naira — only real P&L */}
           {pnl ? (
             <section className={`${s.c} ${s.hl}`} aria-label="Saved vs holding naira">
-              <div className={s.row}>
+              <div className={testnet ? `${s.row} ${s.testRow}` : s.row}>
                 <span className={s.lbl}>Saved vs holding naira</span>
                 {testnet ? (
                   <span className={`${s.chip} ${s.testPill}`}>Testnet · mock tokens</span>
