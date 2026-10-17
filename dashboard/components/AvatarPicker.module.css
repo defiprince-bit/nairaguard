@@ -96,6 +96,7 @@
 
 .chipText {
   color: var(--ink-muted);
+  white-space: nowrap;
 }
 
 .hit {

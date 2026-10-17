@@ -52,7 +52,7 @@ export function AppShell({
       <div className={s.body}>
         {/* Mobile header (same chrome as WalletGate's default header). */}
         <header className={s.mobHead}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <span className={s.mobBrand} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
             <img src="/logo-v2.svg" alt="" width={28} height={28} style={{ borderRadius: 8 }} />
             <strong style={{ color: 'var(--brand)' }}>NairaGuard</strong>
           </span>
