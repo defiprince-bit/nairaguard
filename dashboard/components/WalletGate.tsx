@@ -1,6 +1,7 @@
 'use client';
 
 import { ThemeToggle } from './ThemeToggle';
+import { LegalFooter } from './LegalFooter';
 import { Fragment, ReactNode, useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Button } from './Button';
@@ -70,11 +71,12 @@ export function WalletGate({ children, bare }: { children: (address: string, min
         </section>
         <div className={g.card}>
           <img src="/icon-v2.svg" alt="" width={68} height={68} className={g.icon} />
-          <h1 className={`${g.title} ${g.mob}`}>Connect your wallet</h1>
-          <h2 className={`${g.title} ${g.desk}`}>Connect your wallet</h2>
+          {/* Inside MiniPay the wallet connects itself: never say "Connect". */}
+          <h1 className={`${g.title} ${g.mob}`}>{miniPay ? 'Opening your MiniPay wallet' : 'Connect your wallet'}</h1>
+          <h2 className={`${g.title} ${g.desk}`}>{miniPay ? 'Opening your MiniPay wallet' : 'Connect your wallet'}</h2>
           <p className={g.sub}>
             {miniPay
-              ? 'MiniPay is ready. Tap below if your wallet did not connect automatically.'
+              ? 'MiniPay didn\u2019t share your account yet. Tap Try again.'
               : 'Connect Valora, MetaMask or another Celo wallet. On your phone, MiniPay is the quickest way in.'}
           </p>
           {error ? <ErrorBanner message={error} onRetry={() => setError(null)} /> : null}
@@ -82,7 +84,7 @@ export function WalletGate({ children, bare }: { children: (address: string, min
             <Button fullWidth className={g.cta} onClick={() => setSheet(true)}>Connect wallet</Button>
           ) : (
             <Button fullWidth className={g.cta} onClick={connect} disabled={connecting}>
-              {connecting ? 'Connecting…' : 'Retry MiniPay connect'}
+              {connecting ? 'Opening MiniPay…' : 'Try again'}
             </Button>
           )}
           {!miniPay ? (
@@ -94,6 +96,7 @@ export function WalletGate({ children, bare }: { children: (address: string, min
           <p className={g.note}>Your own vault · withdraw anytime</p>
         </div>
         </div>
+        <LegalFooter />
         {sheet && !miniPay ? <ConnectSheet onClose={() => setSheet(false)} /> : null}
       </div>
     );

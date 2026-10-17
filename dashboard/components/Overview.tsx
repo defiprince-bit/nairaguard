@@ -1,6 +1,7 @@
 'use client';
 
 import { ThemeToggle } from './ThemeToggle';
+import { LegalFooter } from './LegalFooter';
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -350,6 +351,7 @@ export function Overview({ vault, owner, miniPay }: { vault: `0x${string}`; owne
             )}
           </section>
         </main>
+        <LegalFooter />
       </div>
 
       <BottomNav approvalCount={pending} hideWide />
