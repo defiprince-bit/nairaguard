@@ -1,0 +1,5 @@
+/* Footer links: 44px touch targets so they're tappable at 360px inside MiniPay. Styling only. */
+.foot { line-height: 18px; }
+.foot nav { gap: 4px !important; }
+.foot a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 10px; border-radius: 999px; font-weight: 600; }
+.foot a:hover { background: var(--tile); }
