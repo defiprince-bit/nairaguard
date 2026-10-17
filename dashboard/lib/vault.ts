@@ -24,7 +24,7 @@ export const factoryAbi = parseAbi([
   'function usdt() view returns (address)',
 ]);
 export const vaultAbi = parseAbi(['function deposit(address token, uint256 amount)']);
-export const erc20Abi = parseAbi(['function approve(address spender, uint256 amount) returns (bool)', 'function decimals() view returns (uint8)']);
+export const erc20Abi = parseAbi(['function approve(address spender, uint256 amount) returns (bool)', 'function decimals() view returns (uint8)', 'function allowance(address owner, address spender) view returns (uint256)']);
 
 export type Limits = {
   maxTradeUsd: bigint;
@@ -74,6 +74,20 @@ export function buildCreateVault(factory: `0x${string}`, limits: Limits): Tx {
 
 export function buildApprove(token: `0x${string}`, vault: `0x${string}`, amount: bigint): Tx {
   return { to: token, data: tag(encodeFunctionData({ abi: erc20Abi, functionName: 'approve', args: [vault, amount] })) };
+}
+
+/**
+ * Deposit txs: approve exactly `amount` to the user's own vault (never the factory, never unlimited), skipped when
+ * the current allowance already covers it, then Vault.deposit(token, amount).
+ */
+export function buildDepositTxs(token: `0x${string}`, vault: `0x${string}`, amount: bigint, allowance: bigint): Tx[] {
+  if (amount <= 0n) throw new Error('amount must be above zero');
+  return allowance >= amount ? [buildDeposit(vault, token, amount)] : [buildApprove(token, vault, amount), buildDeposit(vault, token, amount)];
+}
+
+/** token.allowance(owner, vault) over the app's RPC (MiniPay's read provider may be on another chain). */
+export async function readAllowance(token: `0x${string}`, owner: `0x${string}`, vault: `0x${string}`): Promise<bigint> {
+  return appClient().readContract({ address: token, abi: erc20Abi, functionName: 'allowance', args: [owner, vault] }) as Promise<bigint>;
 }
 
 export function buildDeposit(vault: `0x${string}`, token: `0x${string}`, amount: bigint): Tx {

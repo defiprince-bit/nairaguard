@@ -5,13 +5,14 @@ export const VAULT_CREATED = parseAbiItem('event VaultCreated(address indexed ow
 export const DEPOSITED = parseAbiItem('event Deposited(address indexed token, uint256 amount, address indexed from)');
 export const SWAP_REJECTED = parseAbiItem('event SwapRejected(uint256 indexed id)');
 export const SWAP_APPROVED = parseAbiItem('event SwapApproved(uint256 indexed id, uint256 approvedMinOut, uint64 expiresAt)');
+export const WITHDRAWN = parseAbiItem('event Withdrawn(address indexed token, uint256 amount, address indexed to)');
 
 /** Narrow log reader (satisfied by viem PublicClient). */
 export interface LogReader {
   getBlockNumber(): Promise<bigint>;
   getLogs(args: {
     address: `0x${string}` | `0x${string}`[];
-    event: typeof VAULT_CREATED | typeof DEPOSITED | typeof SWAP_REJECTED | typeof SWAP_APPROVED;
+    event: typeof VAULT_CREATED | typeof DEPOSITED | typeof SWAP_REJECTED | typeof SWAP_APPROVED | typeof WITHDRAWN;
     fromBlock: bigint;
     toBlock: bigint;
   }): Promise<Log[]>;
@@ -119,4 +120,43 @@ export async function listVaults(db: Db, factory: string, chainId: number): Prom
     'SELECT vault, owner FROM vaults WHERE factory=$1 AND chain_id=$2 ORDER BY created_block, vault',
     [factory.toLowerCase(), chainId]);
   return r.rows;
+}
+
+/**
+ * Records every Deposited / Withdrawn log of known vaults in `vault_flows`, so P&L can be net of the owner's own
+ * deposits and withdrawals. Own cursor ('<factory>#flows' in factory_scan) starting at the factory deploy block,
+ * so existing vaults are backfilled on first run. Idempotent per (chain, tx, logIndex). Run after scanFactory.
+ */
+export async function scanFlows(o: ScanOpts): Promise<{ from: bigint; to: bigint; flows: number }> {
+  const key = `${o.factory.toLowerCase()}#flows`;
+  const chunk = o.chunk ?? 5_000n;
+  const cur = await o.db.query<{ b: string }>(
+    'SELECT last_scanned_block::text AS b FROM factory_scan WHERE chain_id=$1 AND factory=$2', [o.chainId, key]);
+  const from = cur.rows[0] ? BigInt(cur.rows[0].b) + 1n : o.startBlock;
+  const head = await o.client.getBlockNumber();
+  let flows = 0;
+  for (let start = from; start <= head; start += chunk) {
+    const end = start + chunk - 1n > head ? head : start + chunk - 1n;
+    const known = await listVaults(o.db, o.factory, o.chainId);
+    if (known.length) {
+      const address = known.map((k) => k.vault);
+      for (const [kind, event] of [['deposit', DEPOSITED], ['withdraw', WITHDRAWN]] as const) {
+        const logs = (await o.client.getLogs({ address, event, fromBlock: start, toBlock: end })) as EvLog[];
+        for (const l of logs) {
+          if (l.transactionHash == null || l.logIndex == null || l.args?.amount == null) continue;
+          const r = await o.db.query(
+            `INSERT INTO vault_flows (chain_id, vault, kind, token, amount, block_number, tx_hash, log_index)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING RETURNING tx_hash`,
+            [o.chainId, String(l.address).toLowerCase(), kind, String(l.args.token).toLowerCase(), String(l.args.amount),
+              String(l.blockNumber), l.transactionHash, Number(l.logIndex)]);
+          flows += r.rows.length;
+        }
+      }
+    }
+    await o.db.query(
+      `INSERT INTO factory_scan (chain_id, factory, last_scanned_block, updated_at) VALUES ($1,$2,$3,now())
+       ON CONFLICT (chain_id, factory) DO UPDATE SET last_scanned_block=EXCLUDED.last_scanned_block, updated_at=now()`,
+      [o.chainId, key, String(end)]);
+  }
+  return { from, to: head, flows };
 }

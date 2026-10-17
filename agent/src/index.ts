@@ -5,7 +5,7 @@ import { createChainPorts } from './chain.js';
 import { ADDRESSES, ATTRIBUTION_TAG, MOCK_MARKET_RATE, NETWORK, RPC_URL, WAITLIST_CHAIN_ID, WAITLIST_RPC_URL } from './config.js';
 import { connect, migrate } from './db.js';
 import { runOnce } from './loop.js';
-import { listVaults, scanFactory } from './factory.js';
+import { listVaults, scanFactory, scanFlows } from './factory.js';
 import { MockRfqClient, type RfqClient, TextileRfqClient } from './rfq.js';
 import { FnRateSource } from './textile.js';
 
@@ -94,6 +94,16 @@ async function main(): Promise<void> {
       if (s.created || s.deposits) console.log(`scan ${s.from}-${s.to}: +${s.created} vaults, +${s.deposits} first deposits`);
     } catch (e) {
       console.error('factory scan failed:', (e as Error).message);
+    }
+    try {
+      // Deposits/withdrawals for net-of-flows P&L (backfills from the factory deploy block on first run).
+      const f = await scanFlows({
+        db, client: publicClient as never, factory: addrs.factory, chainId: addrs.chainId,
+        startBlock: addrs.factoryStartBlock, chunk: BigInt(process.env.LOG_CHUNK ?? 5000),
+      });
+      if (f.flows) console.log(`flows ${f.from}-${f.to}: +${f.flows} deposits/withdrawals`);
+    } catch (e) {
+      console.error('flow scan failed:', (e as Error).message);
     }
     if (sepolia) {
       // The mock feed only moves when stamped; keep it inside the vault's 1h staleness bound.

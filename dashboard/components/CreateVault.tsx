@@ -7,7 +7,7 @@ import { InlineMessage } from './InlineMessage';
 import { type FriendlyError, friendlyError } from '../lib/errors';
 import { type CreateResult, recheckCreate, runCreate } from '../lib/createVault';
 import {
-  DEFAULT_PRESET, PRESETS, type PresetId, buildApprove, buildCreateVault, buildDeposit, factoryTokens, lookupVault,
+  DEFAULT_PRESET, PRESETS, type PresetId, buildCreateVault, buildDepositTxs, readAllowance, factoryTokens, lookupVault,
   presetLimits, type Tx, waitForReceipt,
 } from '../lib/vault';
 import { sendTagged } from '../lib/sendTagged';
@@ -155,8 +155,9 @@ export function DepositStep({
       } catch {
         return setError({ kind: 'error', message: 'Enter a valid amount.' });
       }
-      await sendAndWait(eth, owner, buildApprove(addr, vault, units));
-      await sendAndWait(eth, owner, buildDeposit(vault, addr, units));
+      // Exact amount to the user's own vault; no approve when the allowance already covers it.
+      const allowance = await readAllowance(addr, owner, vault).catch(() => 0n);
+      for (const tx of buildDepositTxs(addr, vault, units, allowance)) await sendAndWait(eth, owner, tx);
       onDone();
     } catch (e) {
       setError(friendlyError(e));

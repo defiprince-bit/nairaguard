@@ -5,8 +5,9 @@ import { EmptyState } from './EmptyState';
 import { ErrorBanner } from './ErrorBanner';
 import { Skeleton } from './Skeleton';
 import { TradeRow } from './TradeRow';
+import { CheckRow } from './CheckRow';
 import { Button } from './Button';
-import { type Filter, checkLine, groupByDay, isNoTradeCheck, matchesFilter } from '../lib/format';
+import { type Filter, groupByDay, isCheck, matchesFilter } from '../lib/format';
 import { getJson } from '../lib/overview';
 import type { ActivityItem } from '../lib/types';
 
@@ -110,8 +111,8 @@ export function ActivityList({ vault }: { vault: `0x${string}` }) {
           {groups.map((g) => (
             <section key={g.label} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <h2 className="small" style={{ margin: 0, color: 'var(--ink-muted)', fontWeight: 600 }}>{g.label}</h2>
-              {g.items.map((it) => isNoTradeCheck(it)
-                ? <p key={it.id} className="small" style={{ margin: 0, color: 'var(--ink-muted)' }}>{checkLine(it)}</p>
+              {g.items.map((it) => isCheck(it)
+                ? <CheckRow key={it.id} item={it} />
                 : <TradeRow key={it.id} item={it} />)}
             </section>
           ))}

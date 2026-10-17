@@ -5,7 +5,7 @@ import { createSiweMessage, parseSiweMessage, verifySiweMessage } from 'viem/siw
 import type { Db, RfqOutcome } from './db.js';
 import type { FeedReading } from './feed.js';
 import type { VaultState } from './loop.js';
-import { computePnl, getBaseline } from './pnl.js';
+import { computePnl, pnlBasis } from './pnl.js';
 import { STATS_DEFAULT_CHAIN_ID } from './config.js';
 
 import { WAITLIST_SOURCES, normaliseSource } from './waitlistSources.js';
@@ -95,7 +95,8 @@ export function createApi(d: ApiDeps) {
     if (!rate) return json(503, { error: 'no_rate_yet' });
     const bal = [m('cNGN', ngn, rate, rateAt), m('USDT', usd, rate, rateAt)];
     const total = Number(bal[0]!.amountNgn) + Number(bal[1]!.amountNgn);
-    const b = await getBaseline(d.db, vault, chainId);
+    // Net of the owner's deposits/withdrawals (vault_flows), so adding money is never shown as profit.
+    const { basis: b, since } = await pnlBasis(d.db, vault, d.tokens, chainId);
     const p = b ? computePnl(b, ngn, usd, rate, pnlDec) : undefined;
     return json(200, {
       balances: bal,
@@ -104,7 +105,7 @@ export function createApi(d: ApiDeps) {
       // No baseline yet → P&L unknown, not zero.
       pnlNgn: p ? p.pnlNgn.toFixed(2) : null,
       pnlUsd: p ? p.pnlUsd.toFixed(2) : null,
-      pnlSince: b ? iso(b.fundedAt) : null,
+      pnlSince: b && since ? iso(since) : null,
       volumeUsd: await volumeUsd(vault),
       lastCheckedAt: await lastCheckedAt(vault),
     });
@@ -173,9 +174,10 @@ export function createApi(d: ApiDeps) {
         return json(400, { error: 'cursor_invalid' });
       }
     }
-    const r = await d.db.query<{ src: 'a' | 'q'; id: string; first_at: string; last_at: string; n: number; cur_at: string }>(
+    const r = await d.db.query<{ src: 'a' | 'q'; id: string; last_id: string; first_at: string; last_at: string; n: number; cur_at: string }>(
       `WITH s AS (
-         SELECT created_at AS at, 'a'::text AS src, id, NULL::text AS outcome, NULL::text AS approval_id FROM activity
+         SELECT created_at AS at, 'a'::text AS src, id,
+           CASE WHEN kind='noop' THEN 'noop:' || check_code END AS outcome, NULL::text AS approval_id FROM activity
          WHERE lower(vault)=$1 AND (kind IN ('swap','deposit','withdraw') OR (kind='propose' AND status='rejected')
            OR (kind='noop' AND check_code IS NOT NULL))
          UNION ALL
@@ -183,15 +185,16 @@ export function createApi(d: ApiDeps) {
          WHERE lower(vault)=$1 AND outcome <> 'filled' AND tx_hash IS NULL
        ), l AS (
          SELECT *,
-           (src='q' AND NOT (outcome='price_moved' AND approval_id IS NOT NULL)) AS collapsible,
+           ((src='q' AND NOT (outcome='price_moved' AND approval_id IS NOT NULL)) OR (src='a' AND outcome IS NOT NULL)) AS collapsible,
            lag(src) OVER w AS p_src, lag(outcome) OVER w AS p_outcome,
            lag(outcome='price_moved' AND approval_id IS NOT NULL) OVER w AS p_pinned
          FROM s WINDOW w AS (ORDER BY at, src, id)
        ), g AS (
-         SELECT *, sum(CASE WHEN collapsible AND p_src='q' AND p_outcome=outcome AND NOT p_pinned THEN 0 ELSE 1 END)
+         SELECT *, sum(CASE WHEN collapsible AND p_src=src AND p_outcome=outcome AND NOT p_pinned THEN 0 ELSE 1 END)
            OVER (ORDER BY at, src, id) AS grp FROM l
        ), agg AS (
-         SELECT min(src) AS src, (array_agg(id ORDER BY at, id))[1] AS id, min(at) AS first_at, max(at) AS last_at,
+         SELECT min(src) AS src, (array_agg(id ORDER BY at, id))[1] AS id, (array_agg(id ORDER BY at DESC, id DESC))[1] AS last_id,
+           min(at) AS first_at, max(at) AS last_at,
            count(*)::int AS n FROM g GROUP BY grp
        )
        SELECT *, first_at::text AS cur_at FROM agg
@@ -202,7 +205,7 @@ export function createApi(d: ApiDeps) {
     const last = page[page.length - 1];
     const nextCursor = r.rows.length > limit && last
       ? Buffer.from(JSON.stringify([last.cur_at, String(last.id), last.src])).toString('base64url') : null;
-    const ids = (src: 'a' | 'q') => page.filter((x) => x.src === src).map((x) => String(x.id));
+    const ids = (src: 'a' | 'q') => page.filter((x) => x.src === src).flatMap((x) => [String(x.id), String(x.last_id)]);
     const aRows = new Map<string, Record<string, string | null>>();
     const qRows = new Map<string, Record<string, string | null>>();
     if (ids('a').length) {
@@ -227,10 +230,13 @@ export function createApi(d: ApiDeps) {
         }
         const a = aRows.get(String(g.id))!;
         if (a.kind === 'noop') {
-          // "Checked, no trade needed": written only when the reason changes (see insertCheck).
+          // "Checked, no trade needed": written only when the reason changes (see insertCheck); consecutive checks
+          // with the same code collapse like RFQ outcomes (keyed by the first, latest reason shown).
+          const latest = aRows.get(String(g.last_id)) ?? a;
           return {
-            id: String(a.id), kind: 'check' as const, outcome: null, code: a.check_code, reason: a.reason,
-            status: 'skipped', at: iso(a.created_at!), createdAt: iso(a.created_at!), count: 1,
+            id: String(a.id), kind: 'check' as const, outcome: null, code: a.check_code, reason: latest.reason,
+            status: 'skipped', at: iso(g.first_at), createdAt: iso(g.first_at),
+            count: g.n, firstAt: iso(g.first_at), lastAt: iso(g.last_at),
           };
         }
         const rate = Number(a.rate ?? 0);

@@ -2,6 +2,7 @@
 import { createPublicClient, formatUnits, http, parseAbi } from 'viem';
 import { celo, celoSepolia } from 'viem/chains';
 import { FACTORY_ADDRESS, factoryAbi } from './vault';
+import { isCheck } from './format';
 import type { ApiLimits } from './overviewView';
 import type { ActivityItem, AgentStatus, ApprovalItem, BalancesResponse, Money, VaultStatus } from './types';
 
@@ -99,7 +100,7 @@ export async function loadOverview(vault: `0x${string}`): Promise<OverviewData> 
   const [chainRaw, bal, act, appr, agent, lim, st] = await Promise.all([
     FACTORY_ADDRESS ? readVaultBalances(vault).catch(() => null) : Promise.resolve(null),
     getJson<ApiBalances>(`vault/${v}/balances`).catch(() => null),
-    getJson<{ items: ActivityItem[] }>(`vault/${v}/activity?limit=5`).catch(() => null),
+    getJson<{ items: ActivityItem[] }>(`vault/${v}/activity?limit=20`).catch(() => null),
     getJson<{ items: ApprovalItem[] }>(`vault/${v}/approvals`).catch(() => null),
     getJson<AgentStatus>('agent').catch(() => null),
     getJson<ApiLimits>(`vault/${v}/limits`).catch(() => null),
@@ -115,7 +116,8 @@ export async function loadOverview(vault: `0x${string}`): Promise<OverviewData> 
   }
   return {
     balances: chain || apiBal ? mergeBalances(chain, apiBal, lim?.ok ? lim.data?.targetNgnBps ?? null : null) : null,
-    activity: act?.ok ? act.data?.items ?? [] : [],
+    // No-trade checks are Activity-tab only; Overview's recent list shows money moving.
+    activity: act?.ok ? (act.data?.items ?? []).filter((it) => !isCheck(it)) : [],
     approvals: appr?.ok ? appr.data?.items ?? [] : [],
     agent: agent?.ok ? agent.data : null,
     limits: lim?.ok ? lim.data : null,
