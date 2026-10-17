@@ -14,7 +14,7 @@ import s from './Overview.module.css';
 import { REJECT_HELPER, sendApproveSwap, sendRejectSwap } from '../lib/approve';
 import { APPROVE_HELPER, approvalRate, approvalView, noRate, formatCountdown, lastCheck, msLeft, officialRateLine, pausedLine, tradeOut, txUrl, venueLine } from '../lib/format';
 import { loadOverview, type OverviewBalances } from '../lib/overview';
-import { type ApiLimits, pnlPct, presetFor, ringDash, signedMoney, splitAmount, usd18 } from '../lib/overviewView';
+import { type ApiLimits, isTestnet, pnlPct, presetFor, ringDash, signedMoney, splitAmount, usd18 } from '../lib/overviewView';
 import { shorten } from '../lib/wallet';
 import { WalletAvatar } from './AvatarPicker';
 import { WalletMenu } from './WalletMenu';
@@ -23,6 +23,8 @@ import type { ActivityItem, AgentStatus, ApprovalItem } from '../lib/types';
 
 type Cur = 'NGN' | 'USD';
 const NETWORK_LABEL = process.env.NEXT_PUBLIC_NETWORK === 'celo' ? 'Celo' : 'Celo Sepolia';
+/** Testnet (Celo Sepolia, mock tokens): the savings card shows a label instead of a % / ₦ gain. */
+const testnet = isTestnet();
 
 function agentLine(agent: AgentStatus | null, vaultCheckedAt?: string | null, vaultOk?: boolean | null) {
   if (!agent && !vaultCheckedAt) return null;
@@ -243,13 +245,21 @@ export function Overview({ vault, owner, miniPay }: { vault: `0x${string}`; owne
           {/* Saved vs holding naira — only real P&L */}
           {pnl ? (
             <section className={`${s.c} ${s.hl}`} aria-label="Saved vs holding naira">
-              <div className={s.row}>
+              <div className={testnet ? `${s.row} ${s.testRow}` : s.row}>
                 <span className={s.lbl}>Saved vs holding naira</span>
-                <span className={s.chip}>
-                  {Number(pnl.pnlNgn) >= 0 ? '↗' : '↘'} {pct !== null ? `${pct >= 0 ? '+' : '−'}${Math.abs(pct).toFixed(1)}% ` : ''}since {new Date(pnl.pnlSince).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                </span>
+                {testnet ? (
+                  <span className={`${s.chip} ${s.testPill}`}>Testnet · mock tokens</span>
+                ) : (
+                  <span className={s.chip}>
+                    {Number(pnl.pnlNgn) >= 0 ? '↗' : '↘'} {pct !== null ? `${pct >= 0 ? '+' : '−'}${Math.abs(pct).toFixed(1)}% ` : ''}since {new Date(pnl.pnlSince).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                  </span>
+                )}
               </div>
-              <div className={s.mid}>{hidden ? mask : signedMoney(cur === 'NGN' ? Number(pnl.pnlNgn) : Number(pnl.pnlUsd), cur)}</div>
+              {testnet ? (
+                <div className={s.testLine}>Returns show on mainnet</div>
+              ) : (
+                <div className={s.mid}>{hidden ? mask : signedMoney(cur === 'NGN' ? Number(pnl.pnlNgn) : Number(pnl.pnlUsd), cur)}</div>
+              )}
               <div className={s.sub}>What your vault is worth beyond plain cNGN</div>
               <div className={s.minis}>
                 <div className={s.mini}>Trades this month<b>{activity ? monthTrades : '—'}</b></div>

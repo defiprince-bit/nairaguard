@@ -34,6 +34,11 @@ export function pnlPct(pnlNgn: number, valueNgn: number): number | null {
   return (pnlNgn / base) * 100;
 }
 
+/** True unless the app is built for Celo mainnet (NEXT_PUBLIC_NETWORK=celo). Display only. */
+export function isTestnet(network: string | undefined = process.env.NEXT_PUBLIC_NETWORK): boolean {
+  return network !== 'celo';
+}
+
 /** stroke-dasharray for a share (0–100) of a circle of radius r. */
 export function ringDash(pct: number, r: number): string {
   const c = 2 * Math.PI * r;

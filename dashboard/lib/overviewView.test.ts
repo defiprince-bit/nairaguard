@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { initials, pnlPct, presetFor, ringDash, signedMoney, splitAmount } from './overviewView';
+import { initials, isTestnet, pnlPct, presetFor, ringDash, signedMoney, splitAmount } from './overviewView';
 import { PRESETS } from './vault';
 
 describe('overview view helpers', () => {
@@ -28,4 +28,10 @@ describe('overview view helpers', () => {
     expect(ringDash(150, 10)).toBe('62.8 62.8');
   });
   it('initials', () => expect(initials('0xab12')).toBe('AB'));
+  it('treats anything but Celo mainnet as testnet', () => {
+    expect(isTestnet('celo')).toBe(false);
+    expect(isTestnet('celo-sepolia')).toBe(true);
+    expect(isTestnet(undefined)).toBe(true);
+    expect(isTestnet('')).toBe(true);
+  });
 });
