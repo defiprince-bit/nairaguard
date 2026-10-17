@@ -1,6 +1,7 @@
 'use client';
 
 import { ThemeToggle } from './ThemeToggle';
+import { LegalFooter } from './LegalFooter';
 import { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -74,6 +75,7 @@ export function AppShell({
         <main className={`${s.main} ${compact ? s.compact : ''}`}>
           <h1 className={`h1 ${s.mobTitle}`} style={compact ? undefined : { margin: '0 0 16px' }}>{title}</h1>
           <div className={`${s.content} ${s[variant]}`}>{children}</div>
+          <LegalFooter />
         </main>
       </div>
       <BottomNav approvalCount={approvalCount} hideWide />
