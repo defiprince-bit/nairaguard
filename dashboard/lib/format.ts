@@ -85,6 +85,27 @@ export type Filter = 'all' | 'executed' | 'pending' | 'failed';
 /** A "checked, no trade needed" line (kind 'check' without an RFQ outcome). */
 export const isNoTradeCheck = (item: ActivityItem) => item.kind === 'check' && !item.outcome;
 export const checkLine = (item: ActivityItem) => `Checked, no trade needed: ${item.reason}`;
+/** Any agent check that didn't trade (in-band, below minimum, no quote, price moved). Never a swap row. */
+export const isCheck = (item: ActivityItem) => item.kind === 'check';
+
+/** "Checked, no trade needed" / "Checked 3 times, no trade needed" (RFQ outcomes: "…, no trade"). */
+export function checkTitle(item: ActivityItem): string {
+  const n = item.count ?? 1;
+  const times = n > 1 ? ` ${n} times` : '';
+  return item.outcome ? `Checked${times}, no trade` : `Checked${times}, no trade needed`;
+}
+
+const hm = (d: Date) => d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+const dm = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+/** "14:05" for a single check; "10:00–11:30" for a same-day run; "14 Oct 10:00 – 15 Oct 09:00" across days. */
+export function checkRange(item: ActivityItem): string {
+  const a = new Date(item.firstAt ?? item.at);
+  const b = new Date(item.lastAt ?? item.firstAt ?? item.at);
+  if (Number.isNaN(+a)) return '';
+  if ((item.count ?? 1) <= 1 || Number.isNaN(+b) || +b === +a) return hm(a);
+  if (a.toDateString() === b.toDateString()) return `${hm(a)}–${hm(b)}`;
+  return `${dm(a)} ${hm(a)} – ${dm(b)} ${hm(b)}`;
+}
 
 export function matchesFilter(item: ActivityItem, f: Filter) {
   if (f === 'all') return true;

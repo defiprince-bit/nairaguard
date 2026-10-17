@@ -3,8 +3,8 @@
 > **TEMPLATE — NOT LEGAL ADVICE. Have a qualified lawyer review this before you publish.** Fill in every `[TODO: PLACEHOLDER]`. Last reviewed by counsel: `[TODO: DATE]`.
 
 **Last updated:** [TODO: DATE]
-**Operated by:** [TODO: PUBLISHER NAME] ("we", "us")
-**Contact:** [TODO: CONTACT EMAIL] · Support: [TODO: SUPPORT WHATSAPP/TELEGRAM/EMAIL]
+**Operated by:** Douglas Godwin Michael ("we", "us")
+**Contact:** [TODO: CONTACT EMAIL] · Support: WhatsApp [+234 702 530 5503](https://wa.me/2347025305503)
 
 Welcome to NairaGuard. These terms explain the rules for using NairaGuard and what you should know first. We've kept them plain on purpose. Please read them. By using NairaGuard, you agree to them. If you don't agree, please don't use it.
 
@@ -21,7 +21,7 @@ You choose:
 
 When your mix drifts more than 5 points from your target, the agent may rebalance. It skips trades under $1 and explains every trade in plain English.
 
-NairaGuard works in MiniPay, Valora, MetaMask and other Celo wallets. **NairaGuard is run by [TODO: PUBLISHER NAME]. It is not run by, or affiliated with, MiniPay, Opera, Celo, Valora, MetaMask, or the issuers of cNGN or USD₮.**
+NairaGuard works in MiniPay, Valora, MetaMask and other Celo wallets. **NairaGuard is run by Douglas Godwin Michael. It is not run by, or affiliated with, MiniPay, Opera, Celo, Valora, MetaMask, or the issuers of cNGN or USD₮.**
 
 ## 2. NairaGuard is not a bank, and this is not financial advice
 
@@ -100,4 +100,4 @@ These terms are governed by the laws of **[TODO: JURISDICTION]**. `[TODO: DISPUT
 
 ## 14. Contact
 
-Questions? Reach us at [TODO: SUPPORT WHATSAPP/TELEGRAM/EMAIL] or [TODO: CONTACT EMAIL].
+Questions? Reach us at WhatsApp [+234 702 530 5503](https://wa.me/2347025305503) or [TODO: CONTACT EMAIL].

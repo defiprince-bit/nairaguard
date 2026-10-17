@@ -3,7 +3,7 @@
 > **TEMPLATE — NOT LEGAL ADVICE. Have a qualified lawyer review this before you publish** (for example against Nigeria's Data Protection Act 2023 / NDPC rules and any other laws that apply to you). Fill in every `[TODO: PLACEHOLDER]`.
 
 **Last updated:** [TODO: DATE]
-**Operated by:** [TODO: PUBLISHER NAME] ("we", "us")
+**Operated by:** Douglas Godwin Michael ("we", "us")
 **Contact:** [TODO: CONTACT EMAIL]
 
 This policy explains, in plain words, what information NairaGuard uses, why, and what choices you have. We collect as little as we can.
@@ -72,4 +72,4 @@ Our providers may process data outside Nigeria. `[TODO: LAWYER: describe safegua
 We may update this policy. If we make a big change, we'll tell you in the app or on https://x.com/NairaGuardHQ.
 
 ## 11. Contact
-[TODO: PUBLISHER NAME] · [TODO: CONTACT EMAIL] · Support: [TODO: SUPPORT WHATSAPP/TELEGRAM/EMAIL] · [TODO: JURISDICTION]
+Douglas Godwin Michael · [TODO: CONTACT EMAIL] · Support: WhatsApp [+234 702 530 5503](https://wa.me/2347025305503) · [TODO: JURISDICTION]

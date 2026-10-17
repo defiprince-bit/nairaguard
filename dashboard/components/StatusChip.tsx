@@ -1,4 +1,4 @@
-type Status = 'pending' | 'approved' | 'executed' | 'failed' | 'expired' | 'rejected';
+type Status = 'pending' | 'approved' | 'executed' | 'failed' | 'expired' | 'rejected' | 'checked';
 
 const map: Record<Status, { label: string; bg: string; fg: string }> = {
   pending: { label: 'Pending', bg: 'var(--warn-soft)', fg: 'var(--warn)' },
@@ -7,6 +7,7 @@ const map: Record<Status, { label: string; bg: string; fg: string }> = {
   failed: { label: 'Failed', bg: 'var(--danger-soft)', fg: 'var(--danger)' },
   expired: { label: 'Expired', bg: 'var(--border)', fg: 'var(--ink-muted)' },
   rejected: { label: 'Rejected', bg: 'var(--border)', fg: 'var(--ink-muted)' },
+  checked: { label: 'Checked', bg: 'var(--border)', fg: 'var(--ink-muted)' },
 };
 
 export function StatusChip({ status }: { status: Status }) {

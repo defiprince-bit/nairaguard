@@ -82,7 +82,7 @@ export async function runOnce(d: LoopDeps): Promise<RunResult> {
       d.chain.readState(), d.rates.getRateNgnPerUsd(), d.chain.readFeed().catch(() => undefined),
     ]);
     const dec: Decimals = { ngn: s.ngnDecimals, usd: s.usdDecimals };
-    await logQuote(d.db, d.vault, s.ngnBalance, s.usdBalance, rate, now, dec, d.chainId);
+    await logQuote(d.db, d.vault, s.ngnBalance, s.usdBalance, rate, now, dec, d.chainId, { cngn: d.cngn, usdt: d.usdt });
 
     const skip = async (code: CheckCode, why: string, decision?: StrategyDecision): Promise<RunResult> => {
       await insertCheck(d.db, { chainId: d.chainId, vault: d.vault, code, reason: why, rate: String(rate) });
@@ -283,7 +283,7 @@ async function rfqSwap(
 
   // Per-swap P&L: value change across the swap at the same rate (fees + slippage).
   const fee = valueNgn(after.ngnBalance, after.usdBalance, rate, dec) - valueNgn(s.ngnBalance, s.usdBalance, rate, dec);
-  const p = await logQuote(d.db, d.vault, after.ngnBalance, after.usdBalance, rate, now, dec, d.chainId);
+  const p = await logQuote(d.db, d.vault, after.ngnBalance, after.usdBalance, rate, now, dec, d.chainId, { cngn: d.cngn, usdt: d.usdt });
   await d.db.query(
     `UPDATE activity SET fee_ngn=$1, pnl_ngn=$2 WHERE id=(SELECT max(id) FROM activity WHERE vault=$3 AND tx_hash=$4)`,
     [String(fee), String(p.pnlNgn), d.vault, r.hash]);

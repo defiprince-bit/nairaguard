@@ -22,8 +22,14 @@ export type ActivityItem = {
   amountOut?: Money | string | null;
   /** Task 8b: venue from the vault's on-chain Swapped.target ("textile", a pool label; "textile-mock" on Sepolia). */
   venue?: string | null;
-  /** Not in the API yet: RFQ outcome for a no-trade check ("price_moved" | "no_quote"). Shown quietly. */
+  /** RFQ outcome for a no-trade check ("price_moved" | "no_quote"); null for a plain in-band / below-minimum check. */
   outcome?: string | null;
+  /** kind 'check': stable reason code (in_band, below_min, …). */
+  code?: string | null;
+  /** kind 'check': consecutive identical checks are collapsed into one item; count + first/last time of the run. */
+  count?: number;
+  firstAt?: string;
+  lastAt?: string;
 };
 
 export type ApprovalItem = {
