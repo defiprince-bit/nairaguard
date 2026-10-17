@@ -10,7 +10,7 @@
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08); }
 .icon { width: 68px; height: 68px; border-radius: 18px; box-shadow: 0 0 32px rgba(198, 243, 107, 0.35), 0 8px 24px rgba(0, 0, 0, 0.4); }
 .title { margin: 0; font-size: 28px; line-height: 1.15; font-weight: 700; letter-spacing: -0.02em; color: #ffffff; }
-.sub { margin: 0; font-size: 15px; line-height: 1.5; color: rgba(242, 251, 246, 0.78); }
+.sub { margin: 0; font-size: 16px; line-height: 1.5; color: rgba(242, 251, 246, 0.78); }
 .cta { min-height: 52px !important; border-radius: 999px !important; border: 0 !important; font-size: 16px; color: #0b1f17 !important;
   background: linear-gradient(90deg, #7df0b0, #c6f36b) !important; box-shadow: 0 10px 30px rgba(166, 243, 120, 0.3); transition: transform .15s ease, box-shadow .15s ease; }
 .cta:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 14px 36px rgba(166, 243, 120, 0.4); }
@@ -41,7 +41,7 @@
   .title { font-size: 30px; }
   .mp { display: flex !important; align-items: center; gap: 14px; margin-top: 6px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
   .mp img { width: 40px; height: 40px; border-radius: 10px; flex: none; }
-  .mp p { margin: 0; font-size: 14px; line-height: 1.45; color: rgba(242, 251, 246, 0.78); }
+  .mp p { margin: 0; font-size: 16px; line-height: 1.45; color: rgba(242, 251, 246, 0.78); }
   .mp strong { color: #fff; }
 }
 
@@ -65,5 +65,7 @@
 :global(html[data-theme='light']) .headline em { background: linear-gradient(135deg, #0f7a4f, #4fae2a); -webkit-background-clip: text; background-clip: text; }
 :global(html[data-theme='light']) .mp { border-top-color: rgba(6, 38, 26, 0.1); }
 :global(html[data-theme='light']) .cta:focus-visible { outline-color: #0f7a4f; }
+.legal { padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+:global(html[data-theme='light']) .legal { border-top-color: rgba(6, 38, 26, 0.1); }
 .toggle { position: absolute; top: 16px; right: 16px; z-index: 2; }
 @media (min-width: 1024px) { .toggle { top: 26px; right: 72px; } }

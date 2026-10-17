@@ -174,8 +174,8 @@ body {
   padding: 0;
   color: var(--ink);
   font-family: var(--font);
-  font-size: 15px;
-  line-height: 22px;
+  font-size: 16px;
+  line-height: 24px;
   font-weight: 400;
   -webkit-font-smoothing: antialiased;
 }
@@ -220,3 +220,4 @@ textarea {
   font-size: 13px;
   line-height: 18px;
 }
+.ng-home-legal { margin-top: 24px; }

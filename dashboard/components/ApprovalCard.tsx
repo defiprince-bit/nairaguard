@@ -58,7 +58,7 @@ export function ApprovalCard({
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-        <strong className="h2" style={{ margin: 0, fontSize: 15 }}>Swap {dir}</strong>
+        <strong className="h2" style={{ margin: 0, fontSize: 16 }}>Swap {dir}</strong>
         <StatusChip status={tx.kind === 'ok' || view.state === 'approved' ? 'approved' : view.state === 'executed' ? 'executed' : rejected ? 'rejected' : expired ? 'expired' : 'pending'} />
       </div>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>

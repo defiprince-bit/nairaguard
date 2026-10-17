@@ -1,5 +1,6 @@
 'use client';
 
+import { LegalFooter } from './LegalFooter';
 import { ThemeToggle } from './ThemeToggle';
 import { Fragment, ReactNode, useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -92,6 +93,7 @@ export function WalletGate({ children, bare }: { children: (address: string, min
             </div>
           ) : null}
           <p className={g.note}>Your own vault · withdraw anytime</p>
+          <LegalFooter variant="always" className={g.legal} />
         </div>
         </div>
         {sheet && !miniPay ? <ConnectSheet onClose={() => setSheet(false)} /> : null}

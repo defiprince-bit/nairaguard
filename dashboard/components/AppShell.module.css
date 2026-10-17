@@ -5,6 +5,12 @@
 .deskHead { display: none !important; }
 .main { max-width: 480px; margin: 0 auto; padding: 8px 16px 96px; }
 .main.compact { padding: 16px; }
+.foot { margin-top: 20px; }
+/* Small phones (MiniPay at 360px): logo only, so the theme toggle and wallet chip fit on one row. */
+@media (max-width: 429px) {
+  .mobHead { gap: 8px; }
+  .mobBrand strong { display: none; }
+}
 .deskTitle { margin: 0; font-size: 32px; font-weight: 800; letter-spacing: -0.03em; color: var(--ink-strong); }
 
 @media (min-width: 1000px) {

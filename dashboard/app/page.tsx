@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 import { WaitlistForm } from '../components/WaitlistForm';
 import { Skeleton } from '../components/Skeleton';
+import { LegalFooter } from '../components/LegalFooter';
 
 /** Set when Architecture's rate script ships a real figure. Hide the card until then. */
 const LOSS_NGN: number | undefined = undefined;
@@ -68,6 +69,7 @@ export default function Home() {
           <WaitlistForm />
         </Suspense>
       </div>
+      <LegalFooter variant="always" className="ng-home-legal" />
     </main>
   );
 }

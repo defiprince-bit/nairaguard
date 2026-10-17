@@ -7,6 +7,7 @@ import { usePathname } from 'next/navigation';
 import { BottomNav, NAV_ITEMS } from './BottomNav';
 import { WalletChip, WalletAvatar } from './AvatarPicker';
 import { WalletMenu } from './WalletMenu';
+import { LegalFooter } from './LegalFooter';
 import o from './Overview.module.css';
 import s from './AppShell.module.css';
 import { shorten } from '../lib/wallet';
@@ -46,12 +47,13 @@ export function AppShell({
             </Link>
           );
         })}
+        <LegalFooter variant="side" />
       </aside>
 
       <div className={s.body}>
         {/* Mobile header (same chrome as WalletGate's default header). */}
         <header className={s.mobHead}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <span className={s.mobBrand} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
             <img src="/logo-v2.svg" alt="" width={28} height={28} style={{ borderRadius: 8 }} />
             <strong style={{ color: 'var(--brand)' }}>NairaGuard</strong>
           </span>
@@ -74,6 +76,7 @@ export function AppShell({
         <main className={`${s.main} ${compact ? s.compact : ''}`}>
           <h1 className={`h1 ${s.mobTitle}`} style={compact ? undefined : { margin: '0 0 16px' }}>{title}</h1>
           <div className={`${s.content} ${s[variant]}`}>{children}</div>
+          <LegalFooter className={s.foot} />
         </main>
       </div>
       <BottomNav approvalCount={approvalCount} hideWide />

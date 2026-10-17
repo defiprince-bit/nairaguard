@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { BottomNav, NAV_ITEMS } from './BottomNav';
+import { LegalFooter } from './LegalFooter';
 import { ErrorBanner } from './ErrorBanner';
 import { Skeleton } from './Skeleton';
 import { DepositSheet, WithdrawSheet } from './MoneySheet';
@@ -187,6 +188,7 @@ export function Overview({ vault, owner, miniPay }: { vault: `0x${string}`; owne
             </Link>
           );
         })}
+        <LegalFooter variant="side" />
       </aside>
 
       <div className={s.main}>
@@ -253,7 +255,7 @@ export function Overview({ vault, owner, miniPay }: { vault: `0x${string}`; owne
               <div className={s.minis}>
                 <div className={s.mini}>Trades this month<b>{activity ? monthTrades : '—'}</b></div>
                 <button type="button" className={s.mini} onClick={() => setShowOfficial((v) => !v)} aria-expanded={showOfficial} disabled={!official}
-                  style={{ textAlign: 'left', border: 0, font: 'inherit', cursor: official ? 'pointer' : 'default' }}>
+                  style={{ textAlign: 'left', border: 0, fontFamily: 'inherit', cursor: official ? 'pointer' : 'default' }}>
                   Naira rate today<b>{rate > 0 ? `₦${rate.toLocaleString('en-US', { maximumFractionDigits: 0 })} / $` : 'Rate unavailable'}</b>
                   {showOfficial && official ? <span style={{ display: 'block', fontSize: 12, marginTop: 4 }}>{official}</span> : null}
                 </button>
@@ -349,6 +351,7 @@ export function Overview({ vault, owner, miniPay }: { vault: `0x${string}`; owne
               })
             )}
           </section>
+          <LegalFooter className={s.foot} />
         </main>
       </div>
 

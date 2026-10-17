@@ -1,0 +1,19 @@
+/* Legal footer (Terms · Privacy · Support + operator line). Styling only. */
+.foot { display: grid; gap: 6px; color: var(--ink-muted); font-size: 14px; line-height: 20px; }
+.links { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 0 -10px; }
+.links a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 10px; border-radius: 999px; color: var(--ink-soft); font-weight: 600; font-size: 15px; text-decoration: none; }
+.links a:hover { background: var(--tile); color: var(--ink-strong); }
+.op { margin: 0; color: var(--ink-muted); }
+
+.page { text-align: center; padding: 8px 4px 0; }
+.page .links { justify-content: center; margin: 0; }
+.always { text-align: center; }
+.always .links { justify-content: center; margin: 0; }
+.side { display: none; }
+
+@media (min-width: 1000px) {
+  .page { display: none; }
+  .side { display: grid; margin-top: auto; padding: 14px 8px 0; border-top: 1px solid var(--line); font-size: 13px; line-height: 18px; }
+  .side .links { margin: 0 -10px; gap: 0; }
+  .side .links a { font-size: 14px; min-height: 36px; }
+}
