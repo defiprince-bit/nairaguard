@@ -85,6 +85,7 @@ export function WaitlistForm() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           email,
+          contact: email, // older agent builds read `contact`
           consent,
           wallet: w || undefined,
           fromMiniPay: isMiniPay,
