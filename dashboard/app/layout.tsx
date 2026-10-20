@@ -5,7 +5,7 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'NairaGuard',
   description: 'Stop losing money when the naira moves.',
-  metadataBase: new URL('https://nairaguard-vert.vercel.app'),
+  metadataBase: new URL('https://nairaguard.space'),
   openGraph: {
     title: 'NairaGuard',
     description: 'Stop losing money when the naira moves.',

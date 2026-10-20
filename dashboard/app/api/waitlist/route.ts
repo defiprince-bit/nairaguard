@@ -7,11 +7,6 @@ function isEmail(v: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 }
 
-function isPhone(v: string) {
-  const digits = v.replace(/[\s()-]/g, '');
-  return /^\+?\d{7,15}$/.test(digits);
-}
-
 function isAddress(v: string) {
   return /^0x[a-fA-F0-9]{40}$/.test(v);
 }
@@ -39,12 +34,14 @@ export async function POST(req: NextRequest) {
   }
 
   const {
+    email: rawEmail,
     contact,
     consent,
     wallet,
     fromMiniPay,
     source: rawSource,
   } = body as {
+    email?: unknown;
     contact?: unknown;
     consent?: unknown;
     wallet?: unknown;
@@ -52,24 +49,22 @@ export async function POST(req: NextRequest) {
     source?: unknown;
   };
 
-  if (typeof contact !== 'string' || !contact.trim()) {
-    return NextResponse.json({ ok: false, error: 'contact_required' }, { status: 400 });
+  // Email required; wallet optional.
+  const email = typeof rawEmail === 'string' ? rawEmail : contact;
+  if (typeof email !== 'string' || !email.trim()) {
+    return NextResponse.json({ ok: false, error: 'email_required' }, { status: 400 });
   }
-  const trimmed = contact.trim();
-  if (!isEmail(trimmed) && !isPhone(trimmed)) {
-    return NextResponse.json({ ok: false, error: 'contact_invalid' }, { status: 400 });
+  if (!isEmail(email.trim())) {
+    return NextResponse.json({ ok: false, error: 'email_invalid' }, { status: 400 });
   }
   if (consent !== true) {
     return NextResponse.json({ ok: false, error: 'consent_required' }, { status: 400 });
   }
-  if (wallet != null && wallet !== '' && (typeof wallet !== 'string' || !isAddress(wallet))) {
+  if (wallet != null && wallet !== '' && (typeof wallet !== 'string' || !isAddress(wallet.trim()))) {
     return NextResponse.json({ ok: false, error: 'wallet_invalid' }, { status: 400 });
   }
   if (fromMiniPay != null && typeof fromMiniPay !== 'boolean') {
     return NextResponse.json({ ok: false, error: 'fromMiniPay_invalid' }, { status: 400 });
-  }
-  if (fromMiniPay === true && (!wallet || typeof wallet !== 'string')) {
-    return NextResponse.json({ ok: false, error: 'minipay_wallet_required' }, { status: 400 });
   }
 
   // source is normalised; we do not persist or log PII in this mock.

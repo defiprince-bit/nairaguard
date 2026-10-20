@@ -60,7 +60,7 @@ async function main(): Promise<void> {
   await migrate(db);
 
   const apiPort = Number(process.env.PORT ?? 8080);
-  const dashboardUrl = process.env.DASHBOARD_URL ?? 'https://nairaguard-vert.vercel.app';
+  const dashboardUrl = process.env.DASHBOARD_URL ?? 'https://nairaguard.space';
   // Read-only client for SIWE checks on the waitlist chain (default Celo mainnet). Never sends txs.
   const siweClient = createPublicClient({
     chain: WAITLIST_CHAIN_ID === 42220 ? celo : celoSepolia,
@@ -82,7 +82,7 @@ async function main(): Promise<void> {
     unsubscribeSecret: process.env.UNSUBSCRIBE_SECRET || undefined,
     siwe: { domain: new URL(dashboardUrl).host, uri: dashboardUrl, chainId: WAITLIST_CHAIN_ID, client: siweClient as never },
   });
-  if (!ONCE) serve(api, apiPort, dashboardUrl);
+  if (!ONCE) serve(api, apiPort, process.env.ALLOWED_ORIGINS ?? `${dashboardUrl},https://nairaguard.space,https://nairaguard-vert.vercel.app`);
 
   console.log(`NairaGuard agent ${port.address} on ${NETWORK}, tag ${ATTRIBUTION_TAG}, every ${INTERVAL_MS}ms`);
   const tick = async () => {

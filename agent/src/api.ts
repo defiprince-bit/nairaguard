@@ -387,15 +387,16 @@ export function createApi(d: ApiDeps) {
   async function waitlist(body: unknown, source: string) {
     if (!body || typeof body !== 'object') return json(400, { ok: false, error: 'invalid_body' });
     const b = body as Record<string, unknown>;
-    const contact = typeof b.contact === 'string' ? b.contact.trim() : '';
+    // Email is required; wallet is optional (prefilled from MiniPay / a connected wallet when available).
+    const contact = typeof b.email === 'string' ? b.email.trim() : typeof b.contact === 'string' ? b.contact.trim() : '';
+    if (!contact) return json(400, { ok: false, error: 'email_required' });
     const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact);
-    const isPhone = /^\+?\d{7,15}$/.test(contact.replace(/[\s()-]/g, ''));
-    if (!isEmail && !isPhone) return json(400, { ok: false, error: 'contact_invalid' });
+    if (!isEmail) return json(400, { ok: false, error: 'email_invalid' });
     if (b.consent !== true) return json(400, { ok: false, error: 'consent_required' });
     let wallet: string | null = null;
     if (b.wallet != null && b.wallet !== '') {
-      if (typeof b.wallet !== 'string' || !isAddress(b.wallet)) return json(400, { ok: false, error: 'wallet_invalid' });
-      wallet = b.wallet.toLowerCase();
+      if (typeof b.wallet !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(b.wallet.trim())) return json(400, { ok: false, error: 'wallet_invalid' });
+      wallet = b.wallet.trim().toLowerCase();
     }
     // Any client-sent verified flag is ignored (design.md §4).
     // Secret returned once; only its hash is stored. Required to verify this signup.
@@ -404,7 +405,7 @@ export function createApi(d: ApiDeps) {
       await d.db.query(
         `INSERT INTO waitlist (email, phone, wallet_address, verified, from_minipay, source, consent, signup_token_hash)
          VALUES ($1,$2,$3,false,$4,$5,true,$6)`,
-        [isEmail ? contact : null, isEmail ? null : contact, wallet, b.fromMiniPay === true, source, hashToken(signupToken)]);
+        [contact, null, wallet, b.fromMiniPay === true, source, hashToken(signupToken)]);
       return json(200, { ok: true, signupToken, verified: false });
     } catch (e) {
       if (/unique|duplicate/i.test((e as Error).message)) return json(409, { ok: false, error: 'already_joined' });
@@ -515,9 +516,13 @@ export function createApi(d: ApiDeps) {
 }
 
 /** Plain node:http server around the handler, with CORS for the dashboard origin. */
-export function serve(api: ReturnType<typeof createApi>, port: number, corsOrigin: string) {
+export function serve(api: ReturnType<typeof createApi>, port: number, corsOrigin: string | string[]) {
+  const origins = (Array.isArray(corsOrigin) ? corsOrigin : corsOrigin.split(','))
+    .map((o) => o.trim().replace(/\/+$/, '')).filter(Boolean);
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
-    res.setHeader('Access-Control-Allow-Origin', corsOrigin);
+    const reqOrigin = typeof req.headers.origin === 'string' ? req.headers.origin : '';
+    res.setHeader('Access-Control-Allow-Origin', origins.includes(reqOrigin) ? reqOrigin : origins[0] ?? '');
+    res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'content-type');
     if (req.method === 'OPTIONS') return void res.writeHead(204).end();

@@ -53,7 +53,7 @@ export function WaitlistForm() {
         if (list?.[0]) setWallet(list[0]);
       })
       .catch(() => {
-        /* leave wallet empty; user can still join with contact */
+        /* leave wallet empty; wallet is optional */
       });
   }, []);
 
@@ -68,15 +68,25 @@ export function WaitlistForm() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    const email = contact.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError('Enter a valid email address.');
+      return;
+    }
+    const w = wallet.trim();
+    if (w && !/^0x[0-9a-fA-F]{40}$/.test(w)) {
+      setError('That wallet address does not look right. It should be 0x followed by 40 characters.');
+      return;
+    }
     setSubmitting(true);
     try {
       const res = await fetch(`/api/waitlist?source=${encodeURIComponent(source)}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          contact: contact.trim(),
+          email,
           consent,
-          wallet: wallet || undefined,
+          wallet: w || undefined,
           fromMiniPay: isMiniPay,
           source,
         }),
@@ -85,7 +95,8 @@ export function WaitlistForm() {
       if (!res.ok || !data.ok) {
         const msg: Record<string, string> = {
           consent_required: 'Please agree before joining.',
-          contact_invalid: 'Enter a valid email or phone number.',
+          email_required: 'Enter your email address.',
+          email_invalid: 'Enter a valid email address.',
           wallet_invalid: 'That wallet address does not look right.',
           already_joined: 'You are already on the list.',
         };
@@ -248,15 +259,16 @@ export function WaitlistForm() {
 
       <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <span className="small" style={{ fontWeight: 600 }}>
-          WhatsApp number or email
+          Email
         </span>
         <input
           required
+          type="email"
           value={contact}
           onChange={(e) => setContact(e.target.value)}
-          placeholder="+234 801 234 5678 or you@email.com"
-          inputMode={/^[+\d]/.test(contact) ? 'tel' : 'email'}
-          autoComplete={/^[+\d]/.test(contact) ? 'tel' : 'email'}
+          placeholder="you@email.com"
+          inputMode="email"
+          autoComplete="email"
           style={{
             minHeight: 44,
             padding: '10px 12px',
@@ -276,6 +288,10 @@ export function WaitlistForm() {
         </span>
         <input
           value={wallet}
+          pattern="0x[0-9a-fA-F]{40}"
+          title="0x followed by 40 hex characters"
+          spellCheck={false}
+          autoCapitalize="off"
           onChange={(e) => setWallet(e.target.value)}
           readOnly={isMiniPay}
           placeholder={isMiniPay ? 'Connecting MiniPay…' : '0x…'}

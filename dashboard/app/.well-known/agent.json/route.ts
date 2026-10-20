@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 // ERC-8004 agent card (design.md §6). Must be live before `register(agentURI)`.
-const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://nairaguard-vert.vercel.app';
+const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://nairaguard.space';
 const AGENT = '0xa2a173a481bc063fee0ef11c67fc756dc5f928f4';
 
 export const dynamic = 'force-static';
