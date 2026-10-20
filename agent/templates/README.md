@@ -14,4 +14,4 @@
 | `{{first_line}}` | no | Optional personal opener. Replace with an empty string if unused. |
 
 Final copy is in place.
-Logo is hosted at `https://nairaguard-vert.vercel.app/icon.png`.
+Logo is hosted at `https://nairaguard.space/icon.png`.

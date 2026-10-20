@@ -16,7 +16,7 @@ import { assertTagged, createTxSender } from '../src/txBuilder.js';
 const AGENT = '0xA2A173A481BC063fEE0EF11c67Fc756DC5f928f4';
 const send = process.argv.includes('--send');
 const registry = (process.env.IDENTITY_REGISTRY ?? IDENTITY_REGISTRY_MAINNET) as `0x${string}`;
-const uri = process.env.AGENT_URI ?? agentCardUri(process.env.DASHBOARD_URL ?? 'https://nairaguard-vert.vercel.app');
+const uri = process.env.AGENT_URI ?? agentCardUri(process.env.DASHBOARD_URL ?? 'https://nairaguard.space');
 
 // Refuse early (dry run too): vercel.app URIs or a host that differs from DASHBOARD_URL.
 assertAgentUri(uri, process.env.DASHBOARD_URL);

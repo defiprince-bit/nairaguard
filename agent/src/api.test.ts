@@ -173,6 +173,25 @@ describe('read endpoints', () => {
   });
 });
 
+describe('waitlist: email required, wallet optional', () => {
+  const post = (body: object) => api().handle({ method: 'POST', url: '/api/waitlist', body });
+  const addr = () => privateKeyToAccount(generatePrivateKey()).address;
+  it('rejects a missing or invalid email', async () => {
+    expect((await post({ consent: true, wallet: addr() })).body).toMatchObject({ error: 'email_required' });
+    expect((await post({ email: 'nope', consent: true })).body).toMatchObject({ error: 'email_invalid' });
+    expect((await post({ contact: '+2348012345678', consent: true })).body).toMatchObject({ error: 'email_invalid' });
+  });
+  it('accepts no wallet; validates and lowercases a given wallet (any case)', async () => {
+    expect(await post({ email: 'x1@example.com', consent: true })).toMatchObject({ status: 200, body: { ok: true } });
+    const w = addr();
+    expect((await post({ email: 'x2@example.com', consent: true, wallet: '0x1234' })).body).toMatchObject({ error: 'wallet_invalid' });
+    expect((await post({ email: 'x2@example.com', consent: true, wallet: `0x${'g'.repeat(40)}` })).body).toMatchObject({ error: 'wallet_invalid' });
+    expect((await post({ email: 'x2@example.com', consent: true, wallet: w.toUpperCase().replace('0X', '0x') })).status).toBe(200);
+    const { rows } = await db.query<any>('SELECT * FROM waitlist WHERE email=$1', ['x2@example.com']);
+    expect(rows[0]).toMatchObject({ wallet_address: w.toLowerCase(), phone: null });
+  });
+});
+
 describe('waitlist (SIWE)', () => {
   const acc = privateKeyToAccount(generatePrivateKey());
   async function signed(a: ReturnType<typeof api>) {
@@ -193,7 +212,7 @@ describe('waitlist (SIWE)', () => {
     expect(r).toMatchObject({ status: 200, body: { ok: true, verified: false } });
     const id = (r.body as { signupToken: string }).signupToken;
     expect(id).toMatch(/^[0-9a-f]{64}$/);
-    await join(a, { contact: '+2348012345678', consent: true }, '/api/waitlist?source=evil');
+    await join(a, { contact: 'bola@example.com', consent: true }, '/api/waitlist?source=evil');
     let { rows } = await db.query<any>('SELECT * FROM waitlist ORDER BY id');
     expect(rows[0]).toMatchObject({ verified: false, source: 'celo-ng', from_minipay: true });
     expect(rows[1]).toMatchObject({ verified: false, source: 'direct' });

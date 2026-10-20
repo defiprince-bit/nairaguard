@@ -194,8 +194,8 @@ async function getWalletConnect(): Promise<EthProvider> {
     metadata: {
       name: 'NairaGuard',
       description: 'Your naira, guarded by an agent with limits you set.',
-      url: typeof window !== 'undefined' ? window.location.origin : 'https://nairaguard-vert.vercel.app',
-      icons: ['https://nairaguard-vert.vercel.app/logo-v2.svg'],
+      url: typeof window !== 'undefined' ? window.location.origin : 'https://nairaguard.space',
+      icons: ['https://nairaguard.space/logo-v2.svg'],
     },
   });
   wcProvider = p as unknown as EthProvider;

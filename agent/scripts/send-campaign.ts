@@ -24,7 +24,7 @@ const batch = batchArg ? Number(batchArg) : undefined;
 if (batch !== undefined && !(Number.isInteger(batch) && batch > 0)) throw new Error('--batch must be a positive integer');
 
 const tplDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'templates');
-const dashboardUrl = process.env.DASHBOARD_URL ?? 'https://nairaguard-vert.vercel.app';
+const dashboardUrl = process.env.DASHBOARD_URL ?? 'https://nairaguard.space';
 const secret = process.env.UNSUBSCRIBE_SECRET;
 if (!secret) throw new Error('UNSUBSCRIBE_SECRET required (must match the agent API)');
 if (send && (!process.env.RESEND_API_KEY || !process.env.MAIL_FROM)) throw new Error('--send needs RESEND_API_KEY and MAIL_FROM');
