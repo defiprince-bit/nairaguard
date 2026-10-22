@@ -148,7 +148,7 @@ async function requireLoginSignature(provider: EthProvider, address: string, cha
 
 type ActivateOpts = { request: boolean; /** Skip personal_sign (boot restore with valid session, or MiniPay). */ skipSign?: boolean };
 
-async function activate(provider: EthProvider, kind: ConnectorKind, label: string, opts: ActivateOpts) {
+async function activate(provider: EthProvider, kind: ConnectorKind, label: string, opts: ActivateOpts, rdns?: string) {
   const accounts = (await provider.request({ method: opts.request ? 'eth_requestAccounts' : 'eth_accounts' })) as string[];
   if (!accounts?.[0]) return false;
   const address = accounts[0] as `0x${string}`;
@@ -160,7 +160,7 @@ async function activate(provider: EthProvider, kind: ConnectorKind, label: strin
 
   attach(provider);
   set({ provider, kind, label, address, chainId });
-  if (kind !== 'minipay') try { localStorage.setItem(LAST_KEY, JSON.stringify({ kind, label })); } catch {}
+  if (kind !== 'minipay') try { localStorage.setItem(LAST_KEY, JSON.stringify(rdns ? { kind, label, rdns } : { kind, label })); } catch {}
   return true;
 }
 
@@ -204,7 +204,7 @@ async function getWalletConnect(): Promise<EthProvider> {
 
 export async function connectInjected(w: DiscoveredWallet) {
   try {
-    return await activate(w.provider, 'injected', w.name, { request: true });
+    return await activate(w.provider, 'injected', w.name, { request: true }, w.rdns);
   } catch (e) {
     if (e instanceof LoginSignatureRejectedError) {
       await revokeQuietly(w.provider, 'injected');
@@ -268,12 +268,51 @@ export async function switchToAppChain(p: EthProvider | undefined = getProvider(
   set({ chainId: CHAIN_ID });
 }
 
+const OKX_RDNS = 'com.okex.wallet';
+
+/**
+ * Re-find the provider for a stored rdns after reload: EIP-6963 announce first,
+ * then window.okxwallet for OKX, then window.ethereum for the legacy "injected" entry.
+ * Never prompts — discovery only.
+ */
+export function findInjectedProvider(rdns: string | undefined, timeoutMs = 300): Promise<EthProvider | undefined> {
+  if (typeof window === 'undefined') return Promise.resolve(undefined);
+  const fallback = (): EthProvider | undefined => {
+    if (rdns === OKX_RDNS) {
+      const okx = (window as unknown as { okxwallet?: EthProvider }).okxwallet;
+      if (okx) return okx;
+    }
+    if (!rdns || rdns === 'injected') return window.ethereum;
+    return undefined;
+  };
+  if (!rdns || rdns === 'injected') return Promise.resolve(fallback());
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (p: EthProvider | undefined) => {
+      if (done) return;
+      done = true;
+      clearTimeout(t);
+      window.removeEventListener('eip6963:announceProvider', handler);
+      resolve(p);
+    };
+    const handler = (e: Event) => {
+      const d = (e as CustomEvent).detail as { info?: { rdns?: string }; provider?: EthProvider };
+      if (d?.info?.rdns === rdns && d.provider) finish(d.provider);
+    };
+    const t = setTimeout(() => finish(fallback()), timeoutMs);
+    window.addEventListener('eip6963:announceProvider', handler);
+    window.dispatchEvent(new Event('eip6963:requestProvider'));
+  });
+}
+
 let booted = false;
+/** Test-only: allow boot() to run again. */
+export function __resetBootForTests() { booted = false; }
 /**
  * MiniPay: unchanged auto-connect (no personal_sign — MiniPay cannot sign messages).
  * Elsewhere: silently restore LAST_KEY only when a valid sessionStorage login exists for that address.
  */
-async function boot() {
+export async function boot() {
   if (booted || typeof window === 'undefined') return;
   booted = true;
   const eth = window.ethereum;
@@ -281,7 +320,7 @@ async function boot() {
     await activate(eth, 'minipay', 'MiniPay', { request: true, skipSign: true }).catch(() => false);
     return;
   }
-  let last: { kind?: ConnectorKind; label?: string } = {};
+  let last: { kind?: ConnectorKind; label?: string; rdns?: string } = {};
   try { last = JSON.parse(localStorage.getItem(LAST_KEY) ?? '{}'); } catch {}
 
   if (last.kind === 'walletconnect' && WC_PROJECT_ID) {
@@ -290,10 +329,13 @@ async function boot() {
     const accounts = (await p.request({ method: 'eth_accounts' }).catch(() => [])) as string[];
     if (!accounts?.[0] || !sessionOk(accounts[0])) return;
     await activate(p, 'walletconnect', last.label ?? 'WalletConnect', { request: false, skipSign: true }).catch(() => false);
-  } else if (last.kind === 'injected' && eth) {
-    const accounts = (await eth.request({ method: 'eth_accounts' }).catch(() => [])) as string[];
+  } else if (last.kind === 'injected') {
+    const p = await findInjectedProvider(last.rdns);
+    if (!p) return;
+    const accounts = (await p.request({ method: 'eth_accounts' }).catch(() => [])) as string[];
+    // No signed session for this account → stay logged out; the sign gate runs on next connect.
     if (!accounts?.[0] || !sessionOk(accounts[0])) return;
-    await activate(eth, 'injected', last.label ?? 'Browser wallet', { request: false, skipSign: true }).catch(() => false);
+    await activate(p, 'injected', last.label ?? 'Browser wallet', { request: false, skipSign: true }, last.rdns).catch(() => false);
   }
 }
 
