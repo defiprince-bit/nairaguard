@@ -138,6 +138,16 @@ body {
   background-attachment: fixed;
 }
 
+/* MiniPay / Android WebView: no grey tap box, no mouse/touch focus outline. */
+html, body, a, button, input, select, textarea, label, summary,
+[role='button'], [role='tab'], [tabindex] {
+  -webkit-tap-highlight-color: transparent;
+}
+:focus:not(:focus-visible) { outline: none; }
+a:focus:not(:focus-visible), button:focus:not(:focus-visible), input:focus:not(:focus-visible),
+[role='button']:focus:not(:focus-visible), [role='tab']:focus:not(:focus-visible),
+[tabindex]:focus:not(:focus-visible) { outline: none; box-shadow: none; }
+
 :focus-visible {
   outline: 3px solid var(--focus);
   outline-offset: 2px;
