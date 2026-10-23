@@ -62,3 +62,24 @@ describe('chain guards', () => {
     expect(isWrongChain('0xabc', null, 42220)).toBe(false);
   });
 });
+
+import { overviewTestnet, vaultChainIdFrom } from './overviewView';
+describe('overviewTestnet (vault chainId overrides wallet)', () => {
+  it('vault chain wins over the wallet chain', () => {
+    expect(overviewTestnet(42220, 11142220, 'celo-sepolia')).toBe(false);
+    expect(overviewTestnet(11142220, 42220, 'celo')).toBe(true);
+    expect(overviewTestnet(1, 42220, 'celo')).toBe(true);
+  });
+  it('falls back to the wallet, then env', () => {
+    expect(overviewTestnet(null, 42220, 'celo-sepolia')).toBe(false);
+    expect(overviewTestnet(undefined, 11142220, 'celo')).toBe(true);
+    expect(overviewTestnet(null, null, 'celo')).toBe(false);
+    expect(overviewTestnet(null, null, undefined)).toBe(true);
+  });
+  it('reads chainId from balances, then status', () => {
+    expect(vaultChainIdFrom({ chainId: 42220 }, { chainId: 11142220 })).toBe(42220);
+    expect(vaultChainIdFrom(null, { chainId: 11142220 })).toBe(11142220);
+    expect(vaultChainIdFrom({}, { chainId: '42220' })).toBeNull();
+    expect(vaultChainIdFrom(null, undefined)).toBeNull();
+  });
+});
