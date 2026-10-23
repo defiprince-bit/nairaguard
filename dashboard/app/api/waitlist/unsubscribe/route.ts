@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 
 /** Signed unsubscribe link from campaign emails; forwarded to the agent API, which checks the signature. */
 export async function GET(req: NextRequest) {
-  const upstream = process.env.AGENT_API_URL;
+  // Waitlist contacts live in the testnet agent DB; WAITLIST_API_URL points there (falls back to AGENT_API_URL).
+  const upstream = process.env.WAITLIST_API_URL ?? process.env.AGENT_API_URL;
   if (!upstream) return NextResponse.json({ ok: false, error: 'unsubscribe_unavailable' }, { status: 503 });
   const r = await fetch(`${upstream}/api/waitlist/unsubscribe${req.nextUrl.search}`, { cache: 'no-store' });
   const ok = r.status === 200;
