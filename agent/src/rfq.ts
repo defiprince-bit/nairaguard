@@ -108,9 +108,10 @@ export function keyEnvMismatch(apiKey: string, chainId: number): string | undefi
 export function describeError(body: unknown, apiKey?: string): string {
   const b = body as Record<string, any> | undefined;
   const e = b?.error;
+  const str = (v: unknown) => (typeof v === 'string' ? v : v == null ? '' : JSON.stringify(v));
   let text = e && typeof e === 'object'
-    ? [e.code, e.message].filter(Boolean).join(': ') || JSON.stringify(e)
-    : e != null ? String(e) : JSON.stringify(b ?? {});
+    ? [e.code, e.message].map(str).filter(Boolean).join(': ') || JSON.stringify(e)
+    : e != null ? str(e) : JSON.stringify(b ?? {});
   if (apiKey && apiKey.length >= 8) text = text.split(apiKey).join('[redacted]');
   text = text.replace(/(tx_(?:live|test)_[A-Za-z0-9]+)\.[A-Za-z0-9_-]+/g, '$1.[redacted]');
   return text.slice(0, 300);

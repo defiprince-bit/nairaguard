@@ -9,6 +9,7 @@ import { computePnl, pnlBasis } from './pnl.js';
 import { STATS_DEFAULT_CHAIN_ID } from './config.js';
 
 import { WAITLIST_SOURCES, normaliseSource } from './waitlistSources.js';
+import { friendlyReason } from './reasons.js';
 import { unsubscribe as doUnsubscribe, verifyUnsubscribeToken } from './campaign.js';
 
 export { WAITLIST_SOURCES, normaliseSource };
@@ -222,7 +223,7 @@ export function createApi(d: ApiDeps) {
         if (g.src === 'q') {
           const x = qRows.get(String(g.id))!;
           return {
-            id: `q${g.id}`, kind: 'check' as const, outcome: x.outcome as RfqOutcome, reason: x.outcome_reason,
+            id: `q${g.id}`, kind: 'check' as const, outcome: x.outcome as RfqOutcome, reason: friendlyReason(x.outcome, x.outcome_reason),
             at: iso(g.first_at), createdAt: iso(g.first_at),
             count: g.n, firstAt: iso(g.first_at), lastAt: iso(g.last_at),
             approvalId: x.approval_id ?? null,
