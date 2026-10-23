@@ -62,3 +62,14 @@ export function signedMoney(n: number, cur: 'NGN' | 'USD') {
 export function initials(addr: string) {
   return addr.slice(2, 4).toUpperCase();
 }
+
+/** True when an API payload carries a chainId that differs from the app's configured chain (ignore that data). */
+export function apiChainMismatch(data: unknown, expected: number): boolean {
+  const c = (data as { chainId?: unknown } | null)?.chainId;
+  return typeof c === 'number' && Number.isFinite(c) && c !== expected;
+}
+
+/** Wallet is connected on a different chain than the app's. MiniPay counts too (e.g. MiniPay testnet mode). */
+export function isWrongChain(address: string | null, walletChainId: number | null, expected: number): boolean {
+  return !!address && walletChainId !== null && walletChainId !== expected;
+}

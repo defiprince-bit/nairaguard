@@ -105,7 +105,8 @@ export function WalletGate({ children, bare }: { children: (address: string, min
   if (wrongChain) {
     return (
       <div style={{ padding: '24px 16px' }}>
-        <SwitchNetworkBar onSwitch={doSwitch} busy={switching} chainName={CHAIN_NAME} />
+        <SwitchNetworkBar onSwitch={doSwitch} busy={switching} chainName={CHAIN_NAME}
+          hint={miniPay ? 'In MiniPay, turn off Testnet mode in Settings, then reopen NairaGuard.' : undefined} />
         {switchErr ? <p className="small" style={{ maxWidth: 520, margin: '8px auto', color: 'var(--danger)' }}>{switchErr}</p> : null}
         <div style={{ maxWidth: 520, margin: '12px auto', display: 'flex', justifyContent: 'flex-end' }}>
           <WalletMenu trigger={<WalletChip address={address} />} />

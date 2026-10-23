@@ -28,6 +28,7 @@ export type ConnectorKind = 'minipay' | 'injected' | 'walletconnect';
 export type DiscoveredWallet = { uuid: string; name: string; icon: string; rdns: string; provider: EthProvider };
 
 export const WC_PROJECT_ID = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? '';
+import { isWrongChain } from './overviewView';
 export const CHAIN_ID = CHAIN.id;
 export const CHAIN_NAME = CHAIN.id === 42220 ? 'Celo' : 'Celo Sepolia';
 const LAST_KEY = 'ng.lastConnector';
@@ -369,7 +370,8 @@ export function useWallet() {
     }
   }, []);
 
-  const wrongChain = !miniPay && !!s.address && s.chainId !== null && s.chainId !== CHAIN_ID;
+  // MiniPay included: in MiniPay testnet mode the wallet is on Celo Sepolia and must not see mainnet vault data.
+  const wrongChain = isWrongChain(s.address, s.chainId, CHAIN_ID);
   const ready = !!s.address && (miniPay || s.kind === 'minipay' || sessionOk(s.address));
   return {
     address: s.address,

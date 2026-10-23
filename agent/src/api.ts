@@ -101,7 +101,7 @@ export function createApi(d: ApiDeps) {
     // Net of the owner's deposits/withdrawals (vault_flows), so adding money is never shown as profit.
     const { basis: b, since } = await pnlBasis(d.db, vault, d.tokens, chainId);
     const p = b ? computePnl(b, ngn, usd, rate, pnlDec) : undefined;
-    return json(200, {
+    return json(200, { chainId: d.chainId ?? null,
       balances: bal,
       ngnShareBps: total > 0 ? Math.round((Number(bal[0]!.amountNgn) / total) * 10_000) : 0,
       targetNgnBps: st?.limits.targetNgnBps ?? null,
@@ -144,7 +144,7 @@ export function createApi(d: ApiDeps) {
       'SELECT outcome, requested_at FROM textile_quotes WHERE lower(vault)=$1 ORDER BY requested_at DESC, id DESC LIMIT 1', [vault]);
     const lastQ = lo.rows[0];
     const paused = st?.paused ? 'owner' : feed && feed.stale ? 'stale_price' : null;
-    return json(200, {
+    return json(200, { chainId: d.chainId ?? null,
       vault, lastCheckedAt: last ? iso(last.ran_at) : null, ok: last ? last.ok : null,
       // Official (Chainlink) ₦ per $1, for reference only; the tradable rate comes from RFQ quotes.
       feedRate: feed?.rateNgnPerUsd != null ? feed.rateNgnPerUsd.toFixed(2) : null,
@@ -217,7 +217,7 @@ export function createApi(d: ApiDeps) {
     if (ids('q').length) {
       for (const x of (await d.db.query<Record<string, string | null>>('SELECT * FROM textile_quotes WHERE id = ANY($1::bigint[])', [ids('q')])).rows) qRows.set(String(x.id), x);
     }
-    return json(200, {
+    return json(200, { chainId: d.chainId ?? null,
       nextCursor,
       items: page.map((g) => {
         if (g.src === 'q') {
@@ -280,7 +280,7 @@ export function createApi(d: ApiDeps) {
          AND (a.status IN ('pending','approved','executed','rejected','expired'))
        ORDER BY a.created_at DESC LIMIT 100`,
       [vault]);
-    return json(200, {
+    return json(200, { chainId: d.chainId ?? null,
       items: r.rows.map((a) => {
         const rate = Number(a.rate ?? 0);
         const token = (t: string, amount: string) =>
@@ -356,7 +356,7 @@ export function createApi(d: ApiDeps) {
     const st = await d.readState(vault as `0x${string}`).catch((e: Error) => e);
     if (st instanceof Error) return st.message === 'unknown vault' ? json(404, { error: 'unknown_vault' }) : json(503, { error: 'chain_unavailable' });
     const l = st.limits;
-    return json(200, {
+    return json(200, { chainId: d.chainId ?? null,
       maxTradeUsd: l.maxTradeUsd.toString(), maxDailyUsd: l.maxDailyUsd.toString(),
       approvalThresholdUsd: l.approvalThresholdUsd.toString(), maxSlippageBps: l.maxSlippageBps, targetNgnBps: l.targetNgnBps,
     });
@@ -366,7 +366,7 @@ export function createApi(d: ApiDeps) {
     const r = await d.db.query<{ ran_at: string; ok: boolean }>('SELECT ran_at, ok FROM agent_runs ORDER BY ran_at DESC LIMIT 1');
     const last = r.rows[0];
     const stale = d.staleAfterMs ?? 15 * 60_000;
-    return json(200, {
+    return json(200, { chainId: d.chainId ?? null,
       address: d.agentAddress, erc8004Id: d.erc8004Id,
       lastRunAt: last ? iso(last.ran_at) : null,
       healthy: !!last && last.ok && now().getTime() - new Date(last.ran_at).getTime() < stale,
