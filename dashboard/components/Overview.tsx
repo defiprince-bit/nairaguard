@@ -169,6 +169,8 @@ export function Overview({ vault, owner, miniPay }: { vault: `0x${string}`; owne
   const rate = Number(cngn?.rate || usdt?.rate || 0);
   const empty = !!balances && balances.balances.every((b) => b.amount === '0');
   const main = splitAmount(cur === 'NGN' ? totalNgn : totalUsd, cur);
+  // A funded vault with no rate at all must never read ₦0: show '—' (USD₮ can't be valued in ₦ without a rate).
+  const noNgn = cur === 'NGN' && rate === 0 && Number(usdt?.amountUsd ?? 0) > 0;
   const usdShare = balances ? 100 - balances.ngnShareBps / 100 : 0;
   const targetUsd = balances ? 100 - balances.targetNgnBps / 100 : 0;
   const pnl = balances?.pnl ?? null;
@@ -221,7 +223,7 @@ export function Overview({ vault, owner, miniPay }: { vault: `0x${string}`; owne
             ) : (
               <>
                 <div className={s.big}>
-                  {hidden ? mask : <>{main.whole}<small>{main.dec}</small></>}
+                  {hidden ? mask : noNgn ? '—' : <>{main.whole}<small>{main.dec}</small></>}
                   <button type="button" className={s.eye} onClick={toggleHide} aria-label={hidden ? 'Show balance' : 'Hide balance'} aria-pressed={hidden}>
                     <Eye hidden={hidden} />
                   </button>

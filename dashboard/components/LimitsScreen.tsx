@@ -5,7 +5,7 @@ import s from './LimitsScreen.module.css';
 import { ErrorBanner } from './ErrorBanner';
 import { InlineMessage } from './InlineMessage';
 import { Skeleton } from './Skeleton';
-import { getJson } from '../lib/overview';
+import { getJson, readVaultLimits } from '../lib/overview';
 import type { ApiLimits } from '../lib/overviewView';
 import { ringDash } from '../lib/overviewView';
 import { classifyError, MSG_TIMEOUT, type FriendlyError } from '../lib/errors';
@@ -33,13 +33,14 @@ export function LimitsScreen({ owner, vault }: { owner: `0x${string}`; vault: `0
   async function load(): Promise<LimitsForm | null> {
     setLoadErr(null);
     try {
-      const r = await getJson<ApiLimits>(`vault/${vault.toLowerCase()}/limits`);
-      if (!r.ok || !r.data) throw new Error('unavailable');
-      const f = formFromApi(r.data);
+      const r = await getJson<ApiLimits>(`vault/${vault.toLowerCase()}/limits`).catch(() => null);
+      // Agent API first; if it can't serve them (e.g. a brand-new vault), read them from the vault contract.
+      const data = r?.ok && r.data ? r.data : await readVaultLimits(vault);
+      const f = formFromApi(data);
       setSaved(f); setForm(f); setPicked(matchPreset(f)); setTouched({});
       return f;
     } catch {
-      setLoadErr('Could not load your limits. Try again.');
+      setLoadErr('We couldn\u2019t reach your vault\u2019s limits just now. Check your connection and try again.');
       return null;
     }
   }

@@ -66,6 +66,20 @@ async function main(): Promise<void> {
     chain: WAITLIST_CHAIN_ID === 42220 ? celo : celoSepolia,
     transport: http(WAITLIST_RPC_URL),
   });
+  let scanning: Promise<unknown> | null = null;
+  let lastOnDemand = 0;
+  const scanOnDemand = async () => {
+    if (!scanning && Date.now() - lastOnDemand > 15_000) {
+      lastOnDemand = Date.now();
+      scanning = scanFactory({
+        db, client: publicClient as never, factory: addrs.factory, chainId: addrs.chainId,
+        startBlock: addrs.factoryStartBlock, chunk: BigInt(process.env.LOG_CHUNK ?? 5000),
+      }).then((s) => { if (s.created) console.log(`on-demand scan ${s.from}-${s.to}: +${s.created} vaults`); })
+        .catch((e) => console.error('on-demand scan failed:', (e as Error).message))
+        .finally(() => { scanning = null; });
+    }
+    await scanning;
+  };
   const api = createApi({
     db,
     chainId: addrs.chainId, // per-vault views (balances, P&L) read this agent's rows; stats default to 42220
@@ -75,8 +89,13 @@ async function main(): Promise<void> {
     decimals: { cngn: decimalsOf.get(addrs.cngn.toLowerCase()) ?? 18, usdt: decimalsOf.get(addrs.usdt.toLowerCase()) ?? 18 },
     readFeed: () => port.readFeed(),
     readState: async (v) => {
-      const known = await listVaults(db, addrs.factory, addrs.chainId);
-      if (!known.some((k) => k.vault.toLowerCase() === v.toLowerCase())) throw new Error('unknown vault');
+      const isKnown = async () => (await listVaults(db, addrs.factory, addrs.chainId)).some((k) => k.vault.toLowerCase() === v.toLowerCase());
+      if (!(await isKnown())) {
+        // A vault created since the last tick: catch up the factory scan once (incremental, from the stored cursor)
+        // so a brand-new vault's balances/limits load right away instead of failing until the next 5-min tick.
+        await scanOnDemand();
+        if (!(await isKnown())) throw new Error('unknown vault');
+      }
       return port.forVault(v).readState();
     },
     unsubscribeSecret: process.env.UNSUBSCRIBE_SECRET || undefined,

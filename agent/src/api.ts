@@ -88,8 +88,10 @@ export function createApi(d: ApiDeps) {
     const q = await latestQuote(vault);
     const st = d.readState ? await d.readState(vault as `0x${string}`).catch(() => undefined) : undefined;
     if (!q && !st) return json(404, { error: 'unknown_vault' });
-    const rate = Number(q?.rate ?? 0);
-    const rateAt = q?.created_at ?? now();
+    // No agent quote yet (new vault): fall back to the onchain Chainlink reference rate so ₦ values never read 0.
+    const feed = !q && d.readFeed ? await d.readFeed().catch(() => undefined) : undefined;
+    const rate = Number(q?.rate ?? feed?.rateNgnPerUsd ?? 0);
+    const rateAt = q?.created_at ?? (feed ? iso(feed.updatedAt) : now());
     const ngn = st?.ngnBalance.toString() ?? q!.ngn_balance;
     const usd = st?.usdBalance.toString() ?? q!.usd_balance;
     if (!rate) return json(503, { error: 'no_rate_yet' });
@@ -350,7 +352,9 @@ export function createApi(d: ApiDeps) {
 
   async function limits(vault: string) {
     if (!d.readState) return json(503, { error: 'chain_unavailable' });
-    const l = (await d.readState(vault as `0x${string}`)).limits;
+    const st = await d.readState(vault as `0x${string}`).catch((e: Error) => e);
+    if (st instanceof Error) return st.message === 'unknown vault' ? json(404, { error: 'unknown_vault' }) : json(503, { error: 'chain_unavailable' });
+    const l = st.limits;
     return json(200, {
       maxTradeUsd: l.maxTradeUsd.toString(), maxDailyUsd: l.maxDailyUsd.toString(),
       approvalThresholdUsd: l.approvalThresholdUsd.toString(), maxSlippageBps: l.maxSlippageBps, targetNgnBps: l.targetNgnBps,

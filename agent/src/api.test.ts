@@ -370,6 +370,23 @@ describe('Task 8b API', () => {
     expect(((await withFeed(false).handle({ method: 'GET', url: `/api/vault/${VAULT}/status` })).body as any).paused).toBe('owner');
   });
 
+  it('/balances falls back to the Chainlink feed rate before the first agent quote (never ₦0)', async () => {
+    const b = (await withFeed(false).handle({ method: 'GET', url: `/api/vault/${VAULT}/balances` }));
+    expect(b.status).toBe(200);
+    const usdt = (b.body as any).balances.find((x: any) => x.token === 'USDT');
+    expect(Number(usdt.rate)).toBeCloseTo(1329.91);
+    if (usdt.amount !== '0') expect(Number(usdt.amountNgn)).toBeGreaterThan(0);
+  });
+
+  it('/limits returns 404 (not 500) for a vault the factory scan does not know', async () => {
+    const unknown = createApi({
+      db, agentAddress: '0xA2A173A481BC063fEE0EF11c67Fc756DC5f928f4', tokens: { cngn: CNGN, usdt: USDT },
+      readState: async () => { throw new Error('unknown vault'); }, now: () => clock,
+      siwe: { domain: DOMAIN, uri: `https://${DOMAIN}`, chainId: 42220, client: client as never },
+    });
+    expect((await unknown.handle({ method: 'GET', url: `/api/vault/${VAULT}/limits` })).status).toBe(404);
+  });
+
   it('activity exposes venue from the stored on-chain label, never for non-swaps', async () => {
     await logQuote(db, VAULT, e18(300_000), e18(100), 1500, clock);
     await db.query(`INSERT INTO activity (vault, kind, token_in, token_out, amount_in, amount_out, rate, reason, status, venue, venue_target)
