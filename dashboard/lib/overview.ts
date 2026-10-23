@@ -3,7 +3,7 @@ import { createPublicClient, formatUnits, http, parseAbi } from 'viem';
 import { celo, celoSepolia } from 'viem/chains';
 import { FACTORY_ADDRESS, factoryAbi } from './vault';
 import { isCheck } from './format';
-import type { ApiLimits } from './overviewView';
+import { type ApiLimits, apiChainMismatch } from './overviewView';
 import type { ActivityItem, AgentStatus, ApprovalItem, BalancesResponse, Money, VaultStatus } from './types';
 
 export const CHAIN = process.env.NEXT_PUBLIC_NETWORK === 'celo' ? celo : celoSepolia;
@@ -108,6 +108,11 @@ export function mergeBalances(
 export async function getJson<T>(path: string): Promise<{ ok: boolean; status: number; data: T | null; mock: boolean }> {
   const r = await fetch(`/api/agent/${path}`, { cache: 'no-store' });
   const data = (await r.json().catch(() => null)) as T | null;
+  // Data from an agent on another chain (e.g. mainnet API vs Sepolia app) is never shown.
+  if (apiChainMismatch(data, CHAIN.id)) {
+    console.warn(`agent API chainId mismatch on ${path}; ignoring response`);
+    return { ok: false, status: 409, data: null, mock: false };
+  }
   return { ok: r.ok, status: r.status, data, mock: r.headers.get('x-nairaguard-mock') === '1' };
 }
 

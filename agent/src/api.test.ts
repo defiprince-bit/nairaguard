@@ -55,7 +55,7 @@ describe('P&L', () => {
     live = state(225_000, 150);
     const r = await api().handle({ method: 'GET', url: `/api/vault/${VAULT}/balances` });
     expect(r.status).toBe(200);
-    expect(r.body).toMatchObject({ pnlNgn: '5000.00', pnlUsd: '3.13', pnlSince: '2026-10-10T00:00:00.000Z', targetNgnBps: 5000 });
+    expect(r.body).toMatchObject({ chainId: 11142220, pnlNgn: '5000.00', pnlUsd: '3.13', pnlSince: '2026-10-10T00:00:00.000Z', targetNgnBps: 5000 });
     const { rows } = await db.query('SELECT * FROM quotes');
     expect(rows).toHaveLength(2);
   });
@@ -376,6 +376,14 @@ describe('Task 8b API', () => {
     const usdt = (b.body as any).balances.find((x: any) => x.token === 'USDT');
     expect(Number(usdt.rate)).toBeCloseTo(1329.91);
     if (usdt.amount !== '0') expect(Number(usdt.amountNgn)).toBeGreaterThan(0);
+  });
+
+  it('vault responses carry the agent chainId', async () => {
+    for (const k of ['status', 'activity', 'approvals', 'limits']) {
+      const r = await api().handle({ method: "GET", url: `/api/vault/${VAULT}/${k}` });
+      expect(r.status, k).toBe(200);
+      expect((r.body as { chainId: number }).chainId, k).toBe(11142220);
+    }
   });
 
   it('/limits returns 404 (not 500) for a vault the factory scan does not know', async () => {

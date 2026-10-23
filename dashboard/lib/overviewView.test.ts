@@ -46,3 +46,19 @@ describe('overview view helpers', () => {
     expect(isTestnet(undefined, 'Celo')).toBe(true); // exactly `celo` only
   });
 });
+
+import { apiChainMismatch, isWrongChain } from './overviewView';
+describe('chain guards', () => {
+  it('apiChainMismatch flags only a different numeric chainId', () => {
+    expect(apiChainMismatch({ chainId: 42220 }, 11142220)).toBe(true);
+    expect(apiChainMismatch({ chainId: 42220 }, 42220)).toBe(false);
+    expect(apiChainMismatch({}, 42220)).toBe(false);
+    expect(apiChainMismatch(null, 42220)).toBe(false);
+  });
+  it('isWrongChain covers MiniPay testnet mode too', () => {
+    expect(isWrongChain('0xabc', 11142220, 42220)).toBe(true);
+    expect(isWrongChain('0xabc', 42220, 42220)).toBe(false);
+    expect(isWrongChain(null, 11142220, 42220)).toBe(false);
+    expect(isWrongChain('0xabc', null, 42220)).toBe(false);
+  });
+});

@@ -127,10 +127,11 @@ export function WalletMenu({ trigger }: { trigger: ReactNode }) {
   );
 }
 
-export function SwitchNetworkBar({ onSwitch, busy, chainName }: { onSwitch: () => void; busy: boolean; chainName: string }) {
+export function SwitchNetworkBar({ onSwitch, busy, chainName, hint }: { onSwitch: () => void; busy: boolean; chainName: string; hint?: string }) {
   return (
     <div className={s.switchBar} role="alert">
       <span>Your wallet is on a different network. NairaGuard runs on {chainName}.</span>
+      {hint ? <span>{hint}</span> : null}
       <button type="button" className={s.chipBtn} style={{ alignSelf: 'flex-start', background: 'var(--solid)', color: 'var(--solid-ink)', border: 0, minHeight: 44, padding: '10px 18px' }} onClick={onSwitch} disabled={busy}>
         {busy ? 'Check your wallet…' : `Switch to ${chainName}`}
       </button>
