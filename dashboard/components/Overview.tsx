@@ -14,7 +14,7 @@ import s from './Overview.module.css';
 import { REJECT_HELPER, sendApproveSwap, sendRejectSwap } from '../lib/approve';
 import { APPROVE_HELPER, approvalRate, approvalView, noRate, formatCountdown, lastCheck, msLeft, officialRateLine, pausedLine, tradeOut, txUrl, venueLine } from '../lib/format';
 import { loadOverview, type OverviewBalances } from '../lib/overview';
-import { type ApiLimits, isTestnet, pnlPct, presetFor, ringDash, signedMoney, splitAmount, usd18 } from '../lib/overviewView';
+import { type ApiLimits, overviewTestnet, pnlPct, presetFor, ringDash, signedMoney, splitAmount, usd18 } from '../lib/overviewView';
 import { shorten, useWallet } from '../lib/wallet';
 import { WalletAvatar } from './AvatarPicker';
 import { WalletMenu } from './WalletMenu';
@@ -103,10 +103,11 @@ function ApprovalBanner({ item, owner, vault, onDone }: { item: ApprovalItem; ow
 
 export function Overview({ vault, owner, miniPay }: { vault: `0x${string}`; owner: `0x${string}`; miniPay?: boolean }) {
   const path = usePathname();
-  // Testnet (mock tokens) → the savings card shows a label instead of a % / ₦ gain. The vault API data
-  // carries no chain ID, so this reads the connected wallet's chain (read-only); env only until it's known.
+  // Testnet (mock tokens) → the savings card shows a label instead of a % / ₦ gain. The vault's chainId
+  // (balances/status API) wins, then the connected wallet's chain (read-only); env only until either is known.
   const { chainId: walletChainId } = useWallet();
-  const testnet = isTestnet(walletChainId);
+  const [vaultChainId, setVaultChainId] = useState<number | null>(null);
+  const testnet = overviewTestnet(vaultChainId, walletChainId);
   const [balances, setBalances] = useState<OverviewBalances | null>(null);
   const [activity, setActivity] = useState<ActivityItem[] | null>(null);
   const [approvals, setApprovals] = useState<ApprovalItem[] | null>(null);
@@ -137,6 +138,7 @@ export function Overview({ vault, owner, miniPay }: { vault: `0x${string}`; owne
       setLimits(d.limits);
       setVaultCheck({ at: d.vaultCheckedAt, ok: d.vaultCheckOk });
       setFeed({ rate: d.feedRate, at: d.feedUpdatedAt, paused: d.paused });
+      setVaultChainId(d.vaultChainId);
       if (d.apiDown) setError('Agent status is unavailable right now. Balances are read from the chain.');
     } catch {
       setError('Could not load your vault. Try again.');

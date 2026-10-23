@@ -3,7 +3,7 @@ import { createPublicClient, formatUnits, http, parseAbi } from 'viem';
 import { celo, celoSepolia } from 'viem/chains';
 import { FACTORY_ADDRESS, factoryAbi } from './vault';
 import { isCheck } from './format';
-import { type ApiLimits, apiChainMismatch } from './overviewView';
+import { type ApiLimits, apiChainMismatch, vaultChainIdFrom } from './overviewView';
 import type { ActivityItem, AgentStatus, ApprovalItem, BalancesResponse, Money, VaultStatus } from './types';
 
 export const CHAIN = process.env.NEXT_PUBLIC_NETWORK === 'celo' ? celo : celoSepolia;
@@ -128,6 +128,8 @@ export type OverviewData = {
   feedRate: string | null;
   feedUpdatedAt: string | null;
   paused: VaultStatus['paused'];
+  /** Vault's chain from the balances/status responses (PR #95). Null when neither carries one. */
+  vaultChainId: number | null;
 };
 
 export async function loadOverview(vault: `0x${string}`): Promise<OverviewData> {
@@ -167,5 +169,6 @@ export async function loadOverview(vault: `0x${string}`): Promise<OverviewData> 
     feedRate: st?.ok ? st.data?.feedRate ?? null : null,
     feedUpdatedAt: st?.ok ? st.data?.feedUpdatedAt ?? null : null,
     paused: st?.ok ? st.data?.paused ?? null : null,
+    vaultChainId: vaultChainIdFrom(bal?.ok ? bal.data : null, st?.ok ? st.data : null),
   };
 }

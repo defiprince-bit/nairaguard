@@ -47,6 +47,20 @@ export function isTestnet(chainId?: number | null, network: string | undefined =
   return network !== 'celo';
 }
 
+/** The vault's chain from API payloads Overview already has (balances first, then status). Null if none carry one. */
+export function vaultChainIdFrom(...payloads: unknown[]): number | null {
+  for (const d of payloads) {
+    const c = (d as { chainId?: unknown } | null | undefined)?.chainId;
+    if (typeof c === 'number' && Number.isFinite(c)) return c;
+  }
+  return null;
+}
+
+/** Overview's testnet label: the vault's chain wins, then the wallet's, then the env. Only 42220 is mainnet. */
+export function overviewTestnet(vaultChainId: number | null | undefined, walletChainId: number | null | undefined, network: string | undefined = process.env.NEXT_PUBLIC_NETWORK): boolean {
+  return isTestnet(vaultChainId ?? walletChainId, network);
+}
+
 /** stroke-dasharray for a share (0–100) of a circle of radius r. */
 export function ringDash(pct: number, r: number): string {
   const c = 2 * Math.PI * r;
