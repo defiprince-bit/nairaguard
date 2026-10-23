@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { decodeFunctionData } from 'viem';
 import { interpretFeed } from './feed.js';
-import { effectiveExpiry, MockRfqClient, mockReactorAbi, parseTextileQuote, quoteMaxAgeSec, TextileRfqClient } from './rfq.js';
+import { describeError, effectiveExpiry, keyEnvMismatch, MockRfqClient, mockReactorAbi, parseTextileQuote, quoteMaxAgeSec, TextileRfqClient } from './rfq.js';
 
 const VAULT = '0xD436aA344C0E2a58a607443680651a2c32066be6' as const;
 const CNGN = '0xF6829D7393dAe24509eb1E52eE8e572e2E271a4f' as const;
@@ -12,7 +12,7 @@ const req = { chainId: 42220, sellToken: CNGN, buyToken: USDT, sellAmount: 13_61
 describe('Textile RFQ client', () => {
   it('logs no_quote without calling the API when there is no key', async () => {
     let called = false;
-    const c = new TextileRfqClient(undefined, (async () => { called = true; throw new Error('x'); }) as never);
+    const c = new TextileRfqClient('', (async () => { called = true; throw new Error('x'); }) as never);
     expect(await c.request(req)).toEqual({ quoted: false, reason: 'no_api_key' });
     expect(called).toBe(false);
   });
@@ -114,5 +114,27 @@ describe('quote TTL', () => {
     const call = decodeFunctionData({ abi: mockReactorAbi, data: r.data });
     expect(call.args[0].deadline).toBe(1_800_000_020n);
     expect(BigInt(Math.floor(effectiveExpiry(r).getTime() / 1000))).toBe(1_800_000_020n);
+  });
+});
+
+describe('Textile error reporting', () => {
+  it('logs the structured error body, not [object Object], and redacts the key', async () => {
+    const key = 'tx_live_abc123.s3cretPart';
+    const c = new TextileRfqClient(key, (async () => ({ ok: false, status: 400, json: async () => ({
+      error: { code: 'invalid_request', message: `bad key ${key}`, request_id: 'r1' } }) })) as never);
+    const r = await c.request(req);
+    expect(r).toEqual({ quoted: false, reason: 'http_400:invalid_request: bad key [redacted]' });
+  });
+  it('redacts any key-shaped secret and stringifies unknown shapes', () => {
+    expect(describeError({ error: 'see tx_test_ab12.zzz' })).toBe('see tx_test_ab12.[redacted]');
+    expect(describeError({ foo: 1 })).toBe('{"foo":1}');
+  });
+  it('refuses a test key on Celo mainnet without calling the API', async () => {
+    let called = false;
+    const c = new TextileRfqClient('tx_test_x.y', (async () => { called = true; throw new Error('x'); }) as never);
+    expect(await c.request(req)).toEqual({ quoted: false, reason: 'test_key_on_mainnet:chain_42220_needs_tx_live_key' });
+    expect(called).toBe(false);
+    expect(keyEnvMismatch('tx_test_x.y', 84532)).toBeUndefined();
+    expect(keyEnvMismatch('tx_live_x.y', 42220)).toBeUndefined();
   });
 });

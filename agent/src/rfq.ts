@@ -70,6 +70,8 @@ export class TextileRfqClient implements RfqClient {
 
   async request(req: RfqRequest): Promise<RfqResult> {
     if (!this.apiKey) return { quoted: false, reason: 'no_api_key' };
+    const env = keyEnvMismatch(this.apiKey, req.chainId);
+    if (env) return { quoted: false, reason: env };
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), this.timeoutMs);
     try {
@@ -83,7 +85,7 @@ export class TextileRfqClient implements RfqClient {
         signal: ctl.signal,
       });
       const body = (await res.json().catch(() => ({}))) as Record<string, any>;
-      if (!res.ok) return { quoted: false, reason: `http_${res.status}${body?.error ? `:${String(body.error).slice(0, 80)}` : ''}` };
+      if (!res.ok) return { quoted: false, reason: `http_${res.status}:${describeError(body, this.apiKey)}` };
       return parseTextileQuote(body, this.now());
     } catch (e) {
       return { quoted: false, reason: (e as Error).name === 'AbortError' ? 'timeout' : 'request_failed' };
@@ -91,6 +93,27 @@ export class TextileRfqClient implements RfqClient {
       clearTimeout(timer);
     }
   }
+}
+
+/** Testnet chains a Textile test key (tx_test_) may call. Any other chain needs a live key (tx_live_). */
+const TEXTILE_TEST_CHAINS = new Set([31337, 84532, 11142220, 11155111, 97]);
+
+/** Textile rejects a test key on mainnet (400 invalid_request). Catch it before the call with a clear reason. */
+export function keyEnvMismatch(apiKey: string, chainId: number): string | undefined {
+  if (apiKey.startsWith('tx_test_') && !TEXTILE_TEST_CHAINS.has(chainId)) return `test_key_on_mainnet:chain_${chainId}_needs_tx_live_key`;
+  return undefined;
+}
+
+/** Readable, secret-free error text from a Textile error body ({ error: { code, message } } or { error: string }). */
+export function describeError(body: unknown, apiKey?: string): string {
+  const b = body as Record<string, any> | undefined;
+  const e = b?.error;
+  let text = e && typeof e === 'object'
+    ? [e.code, e.message].filter(Boolean).join(': ') || JSON.stringify(e)
+    : e != null ? String(e) : JSON.stringify(b ?? {});
+  if (apiKey && apiKey.length >= 8) text = text.split(apiKey).join('[redacted]');
+  text = text.replace(/(tx_(?:live|test)_[A-Za-z0-9]+)\.[A-Za-z0-9_-]+/g, '$1.[redacted]');
+  return text.slice(0, 300);
 }
 
 /** Parse a /v2/rfq/request body. Anything missing → no_quote (no depth is a normal outcome). */
