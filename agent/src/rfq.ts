@@ -117,7 +117,9 @@ export function describeError(body: unknown, apiKey?: string): string {
 }
 
 /** Parse a /v2/rfq/request body. Anything missing → no_quote (no depth is a normal outcome). */
-export function parseTextileQuote(body: Record<string, any>, receivedAt: Date = new Date()): RfqResult {
+export function parseTextileQuote(raw: Record<string, any>, receivedAt: Date = new Date()): RfqResult {
+  // Live API wraps the payload in { data: {...} }; accept both shapes.
+  const body = raw?.data && typeof raw.data === 'object' && !raw.quote ? raw.data : raw;
   if (body?.status === 'no_quote' || !body?.quote) return { quoted: false, reason: 'no_depth' };
   const q = body.quote;
   const swap = body.transactions?.swap;

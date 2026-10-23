@@ -38,6 +38,8 @@ describe('Textile RFQ client', () => {
 
   it('treats no depth, HTTP errors and malformed bodies as no_quote', async () => {
     expect(parseTextileQuote({ status: 'no_quote' })).toEqual({ quoted: false, reason: 'no_depth' });
+    const live = parseTextileQuote({ data: { status: 'quoted', quote: { takerPays: '1200000', buyAmount: '1640820272', spender: '0xa9', expiresAt: '2026-10-23T10:31:49.000Z' }, transactions: { swap: { to: '0xa9', data: '0x0d7a' } } } });
+    expect(live.quoted).toBe(true);
     expect(parseTextileQuote({ quote: { takerPays: '1' } })).toEqual({ quoted: false, reason: 'malformed_quote' });
     const c = new TextileRfqClient('k', (async () => ({ ok: false, status: 401, json: async () => ({ error: 'bad key' }) })) as never);
     expect(await c.request(req)).toEqual({ quoted: false, reason: 'http_401:bad key' });
