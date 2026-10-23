@@ -32,7 +32,15 @@ export const ADDRESSES: Partial<Record<typeof NETWORK, NetworkAddresses>> = {
     priceFeed: (process.env.PRICE_FEED_ADDRESS ?? '0x5EF4E9401d990C57201954472bf9BdB23DCD655d') as `0x${string}`,
     mockReactor: (process.env.MOCK_REACTOR_ADDRESS ?? '0x412e3e068c834758e34f8D5468D6d8DCAddf4DE4') as `0x${string}`,
   },
-  // celo mainnet: TBD after mainnet deploy (Task 9)
+  // Celo mainnet (deployments/celo.json). Textile quotes name the reactor/executor, so no mockReactor. Env vars override.
+  celo: {
+    chainId: 42220,
+    factory: (process.env.FACTORY_ADDRESS ?? '0xfe37fbea39ce656d7f8181e946e723b7b0d8cecb') as `0x${string}`,
+    factoryStartBlock: BigInt(process.env.FACTORY_START_BLOCK ?? 80805463),
+    cngn: (process.env.CNGN_ADDRESS ?? '0xF6829D7393dAe24509eb1E52eE8e572e2E271a4f') as `0x${string}`,
+    usdt: (process.env.USDT_ADDRESS ?? '0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e') as `0x${string}`,
+    priceFeed: (process.env.PRICE_FEED_ADDRESS ?? '0xc17cBE2dB40e53F4984C46F608DA6DA1fF074c11') as `0x${string}`,
+  },
 };
 
 /**

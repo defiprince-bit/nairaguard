@@ -51,7 +51,7 @@ const [cngnDecimals, usdtDecimals, round, head] = await Promise.all([
 ]);
 
 const venueEvents: VenueEvent[] = [];
-const STEP = 50_000n;
+const STEP = 5_000n; // Forno and Chainstack cap eth_getLogs ranges
 for (let b = fromBlock; b <= head.number; b += STEP) {
   const to = b + STEP - 1n > head.number ? head.number : b + STEP - 1n;
   const logs = await client.getLogs({ address: factory, event: venueEv, fromBlock: b, toBlock: to });
