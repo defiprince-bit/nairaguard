@@ -1,6 +1,6 @@
 import { StatusChip } from './StatusChip';
 import type { ActivityItem } from '../lib/types';
-import { checkRange, checkTitle, quoteOutcomeLine } from '../lib/format';
+import { checkRange, checkReason, checkTitle, quoteOutcomeLine } from '../lib/format';
 
 /**
  * An agent check that didn't trade (kind 'check'): plain-English reason, time or time range, neutral "Checked"
@@ -24,7 +24,7 @@ export function CheckRow({ item }: { item: ActivityItem }) {
         <StatusChip status="checked" />
       </div>
       {item.reason ? (
-        <p className="small" style={{ margin: '0 0 6px', color: 'var(--ink-muted)' }}>{item.reason}</p>
+        <p className="small" style={{ margin: '0 0 6px', color: 'var(--ink-muted)' }}>{checkReason(item.reason)}</p>
       ) : null}
       {outcome && outcome !== item.reason ? (
         <p className="small" style={{ margin: '0 0 6px', color: 'var(--ink-muted)' }}>{outcome}</p>

@@ -4,6 +4,7 @@ const KNOWN: Record<string, string> = {
   venue_not_allowlisted: 'The exchange route is not on the allowlist, so no trade.',
   below_feed_floor: 'The exchange price was too far below the naira reference rate, so no trade.',
   below_approved_min_out: "Price moved, didn't trade.",
+  spread_too_thin: 'The exchange rate was not better than the reference rate, so no trade.',
 };
 export const NO_OFFER_TEXT = 'No offer available right now. Will try again next check.';
 

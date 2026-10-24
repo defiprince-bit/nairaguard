@@ -9,6 +9,7 @@ import { runOnce } from './loop.js';
 import { listVaults, scanFactory, scanFlows } from './factory.js';
 import { MockRfqClient, type RfqClient, TextileRfqClient } from './rfq.js';
 import { FnRateSource } from './textile.js';
+import { spreadConfigFromEnv } from './strategy.js';
 
 const INTERVAL_MS = Number(process.env.LOOP_INTERVAL_MS ?? 5 * 60_000);
 const ONCE = process.env.RUN_ONCE === '1';
@@ -109,6 +110,8 @@ async function main(): Promise<void> {
   if (!ONCE) serve(api, apiPort, process.env.ALLOWED_ORIGINS ?? `${dashboardUrl},https://nairaguard.space,https://nairaguard-vert.vercel.app`);
 
   console.log(`NairaGuard agent ${port.address} on ${NETWORK}, tag ${ATTRIBUTION_TAG}, every ${INTERVAL_MS}ms`);
+  const spread = spreadConfigFromEnv();
+  console.log(`spread mode ${spread.enabled ? `on (min ${spread.minEdgeBps} bps, slice ${spread.sliceBps} bps, min $${spread.minTradeUsd})` : 'off'}`);
   const tick = async () => {
     try {
       const s = await scanFactory({
@@ -139,9 +142,9 @@ async function main(): Promise<void> {
     for (const { vault } of vaults) {
       try {
         const r = await runOnce({
-          vault, cngn: addrs.cngn, usdt: addrs.usdt, chainId: addrs.chainId, chain: port.forVault(vault), rates, rfq, db,
+          vault, cngn: addrs.cngn, usdt: addrs.usdt, chainId: addrs.chainId, chain: port.forVault(vault), rates, rfq, db, spread,
         });
-        console.log(`[${new Date().toISOString()}] ${vault} ${r.decision?.action ?? 'approved'}${r.outcome ? ` rfq=${r.outcome}` : ''}${r.txHash ? ` tx=${r.txHash}` : ''} — ${r.skipped ?? r.decision?.reason ?? ''}`);
+        console.log(`[${new Date().toISOString()}] ${vault} ${r.spread ? 'spread' : r.decision?.action ?? 'approved'}${r.outcome ? ` rfq=${r.outcome}` : ''}${r.txHash ? ` tx=${r.txHash}` : ''} — ${r.skipped ?? r.decision?.reason ?? ''}`);
       } catch (e) {
         console.error(`tick failed for ${vault}:`, (e as Error).message);
       }
