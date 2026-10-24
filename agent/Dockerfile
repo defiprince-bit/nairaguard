@@ -13,5 +13,7 @@ FROM node:22-slim
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /out ./
+# Email templates (welcome sender loads ../templates relative to dist/).
+COPY --from=build /app/agent/templates ./templates
 USER node
 CMD ["node", "dist/index.js"]
