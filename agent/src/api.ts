@@ -37,6 +37,8 @@ export type ApiDeps = {
   chainId?: number;
   /** HMAC secret for signed unsubscribe links (UNSUBSCRIBE_SECRET). Route answers 503 when unset. */
   unsubscribeSecret?: string;
+  /** Called after a new waitlist signup (email + consent), fire-and-forget. Errors are logged, never returned. */
+  onSignup?: (email: string) => Promise<unknown>;
   now?: () => Date;
 };
 
@@ -411,6 +413,7 @@ export function createApi(d: ApiDeps) {
         `INSERT INTO waitlist (email, phone, wallet_address, verified, from_minipay, source, consent, signup_token_hash)
          VALUES ($1,$2,$3,false,$4,$5,true,$6)`,
         [contact, null, wallet, b.fromMiniPay === true, source, hashToken(signupToken)]);
+      if (d.onSignup) void d.onSignup(contact).catch((e) => console.warn(`welcome email failed: ${(e as Error).message}`));
       return json(200, { ok: true, signupToken, verified: false });
     } catch (e) {
       if (/unique|duplicate/i.test((e as Error).message)) return json(409, { ok: false, error: 'already_joined' });

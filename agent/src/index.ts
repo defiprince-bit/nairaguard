@@ -1,4 +1,5 @@
 import { createPublicClient, http } from 'viem';
+import { welcomeConfigFromEnv, welcomeSender } from './welcome.js';
 import { celo, celoSepolia } from 'viem/chains';
 import { createApi, serve } from './api.js';
 import { createChainPorts } from './chain.js';
@@ -80,6 +81,9 @@ async function main(): Promise<void> {
     }
     await scanning;
   };
+  // Guardian welcome email: OFF unless WELCOME_EMAIL_ENABLED=true (plus RESEND_API_KEY, MAIL_FROM, UNSUBSCRIBE_SECRET).
+  const welcome = welcomeConfigFromEnv();
+  console.log(`welcome email ${welcome ? 'ON' : 'off'}`);
   const api = createApi({
     db,
     chainId: addrs.chainId, // per-vault views (balances, P&L) read this agent's rows; stats default to 42220
@@ -99,6 +103,7 @@ async function main(): Promise<void> {
       return port.forVault(v).readState();
     },
     unsubscribeSecret: process.env.UNSUBSCRIBE_SECRET || undefined,
+    onSignup: welcome ? welcomeSender(db, welcome) : undefined,
     siwe: { domain: new URL(dashboardUrl).host, uri: dashboardUrl, chainId: WAITLIST_CHAIN_ID, client: siweClient as never },
   });
   if (!ONCE) serve(api, apiPort, process.env.ALLOWED_ORIGINS ?? `${dashboardUrl},https://nairaguard.space,https://nairaguard-vert.vercel.app`);

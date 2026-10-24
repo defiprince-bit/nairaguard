@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApi, WAITLIST_SOURCES as API_SOURCES } from './api.js';
 import {
-  ctaUrl, loadTemplates, type Mailer, render, renderText, runCampaign, selectRecipients, unsubscribeUrl,
+  ctaUrl, loadTemplates, type Mailer, WELCOME_SUBJECT, render, renderText, runCampaign, selectRecipients, unsubscribeUrl,
 } from './campaign.js';
 import { type Db, migrate } from './db.js';
 import { assertAgentUri } from './erc8004.js';
@@ -14,7 +14,7 @@ import { WAITLIST_SOURCE_LIST, WAITLIST_SOURCES } from './waitlistSources.js';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SECRET = 'test-secret';
 const DASH = 'https://nairaguard.app';
-const tpl = loadTemplates(join(root, 'agent/templates/launch-email.html'), join(root, 'agent/templates/launch-email.txt'), 'Deposits are open');
+const tpl = loadTemplates(join(root, 'agent/templates/guardian-welcome.html'), join(root, 'agent/templates/guardian-welcome.txt'), WELCOME_SUBJECT);
 let db: Db;
 let sent: Parameters<Mailer>[0][];
 const mailer: Mailer = async (m) => { sent.push(m); return { id: `re_${sent.length}` }; };
@@ -48,7 +48,7 @@ describe('templates', () => {
     const text = renderText(tpl.text, vars);
     expect(html).not.toMatch(/\{\{|\}\}/);
     expect(text).not.toMatch(/\{\{|\}\}/);
-    expect(html).toContain('href="https://a.example/app?connect=1&amp;utm_source=x"');
+    expect(html).toContain('Unsubscribe'); // the Guardian welcome has no app CTA (private test)
     expect(text).toContain(vars.unsubscribe_url);
   });
   it('throws before sending when a required variable is missing', () => {
