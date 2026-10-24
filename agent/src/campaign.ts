@@ -84,6 +84,13 @@ export async function selectRecipients(db: Db, campaign: string, opts: { only?: 
   return rows;
 }
 
+/** Retired campaigns (the old public launch email). runCampaign refuses them, dry run included. */
+export const RETIRED_CAMPAIGN = /^launch-/;
+/** Guardian welcome: sent once per contact. The one-time backfill and the per-signup auto-send share this slug,
+ * so nobody gets it twice. */
+export const WELCOME_CAMPAIGN = 'guardian-welcome-2026-10';
+export const WELCOME_SUBJECT = "You're a Guardian 🛡️ Thanks for joining NairaGuard";
+
 export const REQUIRED_VARS = ['cta_url', 'unsubscribe_url'] as const;
 export type TemplateVars = { cta_url: string; unsubscribe_url: string; first_line?: string };
 
@@ -136,7 +143,9 @@ export type RunOpts = {
 export type RunResult = { eligible: number; sent: number; failed: number; dryRun: boolean };
 
 export async function runCampaign(db: Db, o: RunOpts): Promise<RunResult> {
-  if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(o.campaign)) throw new Error('--campaign must be a slug like launch-2026-11');
+  if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(o.campaign)) throw new Error('--campaign must be a slug like guardian-welcome-2026-10');
+  // The public "live / deposits are open" launch email is retired (private test only): never send a launch-* campaign.
+  if (RETIRED_CAMPAIGN.test(o.campaign)) throw new Error(`campaign ${o.campaign} is retired and cannot be sent`);
   const recipients = await selectRecipients(db, o.campaign, { only: o.only, limit: o.batch });
   const res: RunResult = { eligible: recipients.length, sent: 0, failed: 0, dryRun: !o.send };
   // Render everything first: a broken template throws before anything is sent.

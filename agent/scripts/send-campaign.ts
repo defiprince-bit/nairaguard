@@ -1,8 +1,8 @@
 /**
  * Send a waitlist email campaign through Resend (email only). Dry run by default: lists counts, sends nothing.
- *   pnpm tsx scripts/send-campaign.ts --campaign launch-2026-11                         # dry run
- *   ... --campaign launch-2026-11 --send --only owner@example.com                       # test-send to one address
- *   ... --campaign launch-2026-11 --send --batch 50                                     # real batch (owner-approved)
+ *   pnpm tsx scripts/send-campaign.ts --campaign guardian-welcome-2026-10                         # dry run
+ *   ... --campaign guardian-welcome-2026-10 --send --only owner@example.com                       # test-send to one address
+ *   ... --campaign guardian-welcome-2026-10 --send --batch 50                                     # real batch (owner-approved)
  * Env: DATABASE_URL, RESEND_API_KEY, MAIL_FROM, UNSUBSCRIBE_SECRET (same as the agent's), DASHBOARD_URL,
  *      optional UNSUBSCRIBE_BASE_URL (default DASHBOARD_URL), EMAIL_TEMPLATE_HTML / EMAIL_TEMPLATE_TEXT, EMAIL_SUBJECT,
  *      MINIPAY_MINIAPP_ID (Discover listing id → link.minipay.xyz/miniapp?id=), optional MINIPAY_DEEPLINK_BASE override.
@@ -10,7 +10,7 @@
  */
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadTemplates, resendMailer, runCampaign } from '../src/campaign.js';
+import { WELCOME_SUBJECT, loadTemplates, resendMailer, runCampaign } from '../src/campaign.js';
 import { connect, migrate } from '../src/db.js';
 
 const args = process.argv.slice(2);
@@ -36,9 +36,9 @@ const res = await runCampaign(db, {
   unsubscribeBaseUrl: process.env.UNSUBSCRIBE_BASE_URL ?? dashboardUrl, unsubscribeSecret: secret,
   from: process.env.MAIL_FROM,
   templates: loadTemplates(
-    process.env.EMAIL_TEMPLATE_HTML ?? join(tplDir, 'launch-email.html'),
-    process.env.EMAIL_TEMPLATE_TEXT ?? join(tplDir, 'launch-email.txt'),
-    process.env.EMAIL_SUBJECT ?? 'Deposits are open on NairaGuard'),
+    process.env.EMAIL_TEMPLATE_HTML ?? join(tplDir, 'guardian-welcome.html'),
+    process.env.EMAIL_TEMPLATE_TEXT ?? join(tplDir, 'guardian-welcome.txt'),
+    process.env.EMAIL_SUBJECT ?? WELCOME_SUBJECT),
   mailer: send ? resendMailer(process.env.RESEND_API_KEY!) : undefined,
   minipayBase: process.env.MINIPAY_DEEPLINK_BASE,
   miniappId: process.env.MINIPAY_MINIAPP_ID,
