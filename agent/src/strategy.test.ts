@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decide, formatNgn, formatUsd, type Limits } from './strategy.js';
+import { decide, formatNgn, formatUsd, type Limits, planSpread, spreadConfigFromEnv, spreadEdgeBps } from './strategy.js';
 
 const limits: Limits = {
   maxTradeUsd: 500,
@@ -21,7 +21,7 @@ describe('strategy.decide', () => {
     // 53% naira vs 50% target, band 5%
     const d = decide({ ngnBalance: 795_000, usdBalance: 470, rateNgnPerUsd: rate, limits, dailySpentUsd: 0 });
     expect(d.action).toBe('none');
-    expect(d.reason).toMatch(/within the 5% band/);
+    expect(d.reason).toMatch(/At your target/);
   });
 
   it('sells naira when over target, swap below threshold, minOut from slippage', () => {
@@ -101,3 +101,32 @@ describe('no-trade codes', () => {
   });
 });
 
+
+describe('spread helpers', () => {
+  const limits = { maxTradeUsd: 100, maxDailyUsd: 500, approvalThresholdUsd: 20, maxSlippageBps: 50, targetNgnBps: 5000 };
+  const cfg = { enabled: true, minEdgeBps: 50, sliceBps: 2500, minTradeUsd: 1.1 };
+  it('edge is positive when the quote is better than the feed, either side', () => {
+    expect(spreadEdgeBps('ngnToUsd', 1300, 1330)).toBe(226);
+    expect(spreadEdgeBps('usdToNgn', 1361, 1330)).toBe(233);
+    expect(spreadEdgeBps('ngnToUsd', 1361, 1330)).toBeLessThan(0);
+    expect(spreadEdgeBps('ngnToUsd', 0, 1330)).toBe(-Infinity);
+  });
+  it('env: off by default, parses values, clamps slice', () => {
+    expect(spreadConfigFromEnv({})).toMatchObject({ enabled: false, minEdgeBps: 50, sliceBps: 2500 });
+    expect(spreadConfigFromEnv({ SPREAD_MODE_ENABLED: 'true', SPREAD_MIN_BPS: '80', SPREAD_SLICE_BPS: '99999' }))
+      .toMatchObject({ enabled: true, minEdgeBps: 80, sliceBps: 10000 });
+  });
+  it('caps the slice under the approval threshold and limits; no buyback above target', () => {
+    const p = planSpread({ ngnBalance: 150_000, usdBalance: 100, rateNgnPerUsd: 1500, limits, dailySpentUsd: 0, cfg });
+    expect(p).toHaveLength(1);
+    expect(p[0]!.direction).toBe('ngnToUsd');
+    expect(p[0]!.usdValue).toBeLessThan(20);
+  });
+  it('skips slices under the minimum and when disabled', () => {
+    expect(planSpread({ ngnBalance: 1640, usdBalance: 1.78, rateNgnPerUsd: 1383, limits, dailySpentUsd: 0, cfg })).toEqual([]);
+    expect(planSpread({ ngnBalance: 150_000, usdBalance: 100, rateNgnPerUsd: 1500, limits, dailySpentUsd: 0, cfg: { ...cfg, enabled: false } })).toEqual([]);
+  });
+  it('respects the remaining daily room', () => {
+    expect(planSpread({ ngnBalance: 150_000, usdBalance: 100, rateNgnPerUsd: 1500, limits, dailySpentUsd: 499.5, cfg })).toEqual([]);
+  });
+});

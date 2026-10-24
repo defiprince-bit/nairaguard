@@ -4,7 +4,7 @@ import {
   recentRejection, recordRun, REJECT_COOLDOWN_MS, REJECT_DRIFT_CHANGE_BPS, type RfqOutcome,
 } from './db.js';
 import type { FeedReading } from './feed.js';
-import { decide, type StrategyDecision } from './strategy.js';
+import { decide, planSpread, spreadEdgeBps, type SpreadConfig, type StrategyDecision } from './strategy.js';
 import { logQuote, valueNgn, type Decimals } from './pnl.js';
 import { effectiveExpiry, quoteMaxAgeSec, type RfqClient } from './rfq.js';
 import type { RateSource } from './textile.js';
@@ -67,9 +67,11 @@ export type LoopDeps = {
   quoteMaxAgeSec?: number;
   bandBps?: number;
   rejectCooldownMs?: number;
+  /** Spread mode (off unless enabled). */
+  spread?: SpreadConfig;
 };
 
-export type RunResult = { decision?: StrategyDecision; txHash?: Hex; skipped?: string; outcome?: RfqOutcome };
+export type RunResult = { decision?: StrategyDecision; txHash?: Hex; skipped?: string; outcome?: RfqOutcome; spread?: boolean };
 
 const toNum = (v: bigint, dec: number) => Number(formatUnits(v, dec));
 const toUnits = (n: number, dec: number) => parseUnits(n.toFixed(Math.min(dec, 6)), dec);
@@ -121,7 +123,39 @@ export async function runOnce(d: LoopDeps): Promise<RunResult> {
       },
     });
 
-    if (decision.action === 'none') return skip(decision.code, decision.reason, decision);
+    if (decision.action === 'none') {
+      // Spread mode: rebalancing has nothing to do, so look for a quote that beats the feed.
+      if (d.spread?.enabled && (decision.code === 'in_band' || decision.code === 'below_min')) {
+        const plans = planSpread({
+          ngnBalance: toNum(s.ngnBalance, dec.ngn), usdBalance: toNum(s.usdBalance, dec.usd), rateNgnPerUsd: rate,
+          dailySpentUsd: toNum(dailySpent, USD_DEC), limits: {
+            maxTradeUsd: toNum(s.limits.maxTradeUsd, USD_DEC), maxDailyUsd: toNum(s.limits.maxDailyUsd, USD_DEC),
+            approvalThresholdUsd: toNum(s.limits.approvalThresholdUsd, USD_DEC), maxSlippageBps: s.limits.maxSlippageBps,
+            targetNgnBps: s.limits.targetNgnBps,
+          }, cfg: d.spread,
+        });
+        let last: RunResult | undefined;
+        for (const p of plans) {
+          const ngnIn = p.direction === 'ngnToUsd';
+          let amt = toUnits(p.amountIn, ngnIn ? dec.ngn : dec.usd);
+          const bal = ngnIn ? s.ngnBalance : s.usdBalance;
+          if (amt > bal) amt = bal;
+          if (amt <= 0n) continue;
+          const r = await rfqSwap(d, s, dec, rate, feed, now, {
+            tokenIn: ngnIn ? d.cngn : d.usdt, tokenOut: ngnIn ? d.usdt : d.cngn, amountIn: amt, approvalId: 0n,
+            reason: p.reason, minEdgeBps: d.spread.minEdgeBps,
+          });
+          console.log(`[spread] ${d.vault} ${p.direction} $${p.usdValue.toFixed(2)} min_edge=${d.spread.minEdgeBps}bps feed=${feed.rateNgnPerUsd} → ${r.outcome ?? 'skipped'}${r.txHash ? ` tx=${r.txHash}` : ''}`);
+          last = { ...r, decision, spread: true };
+          if (r.txHash) break;
+        }
+        if (last) {
+          await recordRun(d.db, d.vault, last.outcome !== 'expired');
+          return last;
+        }
+      }
+      return skip(decision.code, decision.reason, decision);
+    }
     const [tokenIn, tokenOut] = decision.direction === 'ngnToUsd' ? [d.cngn, d.usdt] : [d.usdt, d.cngn];
     const [dIn, dOut] = decision.direction === 'ngnToUsd' ? [dec.ngn, dec.usd] : [dec.usd, dec.ngn];
     let amountIn = toUnits(decision.amountIn, dIn);
@@ -187,6 +221,8 @@ type SwapReq = {
   approvalId: bigint;
   approvedMinOut?: bigint;
   reason: string;
+  /** Spread mode: the quote must beat the feed by this many bps or it is declined. */
+  minEdgeBps?: number;
 };
 
 /** Request a quote (taker = vault), log it, check it, and send swapViaRfq if it's good. Every RFQ gets a row. */
@@ -195,7 +231,7 @@ async function rfqSwap(
 ): Promise<RunResult> {
   const ngnToUsd = q.tokenIn.toLowerCase() === d.cngn.toLowerCase();
   const [dIn, dOut] = ngnToUsd ? [dec.ngn, dec.usd] : [dec.usd, dec.ngn];
-  const side = ngnToUsd ? 'ngnToUsd' : 'usdToNgn';
+  const side = (ngnToUsd ? 'ngnToUsd' : 'usdToNgn') as 'ngnToUsd' | 'usdToNgn';
   const sizeUsd = ngnToUsd ? toNum(q.amountIn, dIn) / rate : toNum(q.amountIn, dIn);
   const base = {
     vault: d.vault, venue: d.rfq.venue, side, tokenIn: q.tokenIn, tokenOut: q.tokenOut, sellAmount: q.amountIn.toString(),
@@ -229,6 +265,12 @@ async function rfqSwap(
     return note(activity, outcome);
   };
 
+  if (q.minEdgeBps !== undefined) {
+    const edge = spreadEdgeBps(side, qRate, feed.rateNgnPerUsd ?? 0);
+    if (!(edge >= q.minEdgeBps)) {
+      return decline('declined', 'spread_too_thin', 'The exchange rate was not better than the reference rate, so no trade.');
+    }
+  }
   if (quote.takerPays > q.amountIn) return decline('declined', 'taker_pays_above_amount', 'The exchange asked for more than planned, so no trade.');
   if (!(await d.chain.isAllowedVenue(quote.target, quote.spender))) {
     return decline('declined', 'venue_not_allowlisted', 'The exchange route is not on the allowlist, so no trade.');

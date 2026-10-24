@@ -259,7 +259,7 @@ describe('agent loop guards', () => {
     await runOnce(deps(chain));
     await runOnce(deps(chain));
     expect((await checks()).map((c) => c.check_code)).toEqual(['in_band']);
-    expect((await checks())[0]).toMatchObject({ status: 'skipped', reason: expect.stringMatching(/within the 5% band/) });
+    expect((await checks())[0]).toMatchObject({ status: 'skipped', reason: expect.stringMatching(/At your target/) });
     // 1 USDT, no naira: the ideal move is $0.50, under the $1 minimum.
     const small = new FakeChain(state({ ngnBalance: 0n, usdBalance: e6(1) }));
     await runOnce(deps(small));
@@ -361,5 +361,57 @@ describe('approvals', () => {
     now = new Date(NOW.getTime() + 3_600_001);
     expect((await runOnce({ ...deps(chain), now: () => now, rejectCooldownMs: 3_600_000 })).decision?.action).toBe('propose');
     expect(chain.sent).toHaveLength(2);
+  });
+});
+
+describe('spread mode', () => {
+  const SPREAD = { enabled: true, minEdgeBps: 50, sliceBps: 2500, minTradeUsd: 1.1 };
+  const inBand = (over: Partial<VaultState> = {}) => state({ ngnBalance: e6(150_000), usdBalance: e6(100), ...over });
+
+  it('is off by default: in band means no quote request', async () => {
+    const rfq = new FakeRfq();
+    const r = await runOnce(deps(new FakeChain(inBand()), rfq));
+    expect(rfq.reqs).toHaveLength(0);
+    expect(r.decision?.action).toBe('none');
+  });
+
+  it('sells a cNGN slice when the quote beats the feed, with a tagged tx', async () => {
+    const rfq = new FakeRfq(); rfq.rate = 1300; // feed 1330: selling at 1300 ₦/$ is 2.3% better
+    const chain = new FakeChain(inBand(), [swappedLog(28_846_153n)]);
+    const r = await runOnce({ ...deps(chain, rfq), spread: SPREAD });
+    expect(r).toMatchObject({ outcome: 'filled', spread: true });
+    expect(rfq.reqs[0]).toMatchObject({ sellToken: CNGN });
+    expect(Number(rfq.reqs[0]!.sellAmount) / 1e6).toBeCloseTo(37_500, -1); // 25% of 150k cNGN
+    expect(fromDataSuffix(chain.sent[0]!.data)?.codes).toContain(ATTRIBUTION_TAG);
+    expect((await quotes())[0]).toMatchObject({ outcome: 'filled', side: 'ngnToUsd' });
+  });
+
+  it('declines (logged, no tx) when the quote is not better than the feed', async () => {
+    const rfq = new FakeRfq(); rfq.rate = 1361;
+    const chain = new FakeChain(inBand());
+    const r = await runOnce({ ...deps(chain, rfq), spread: SPREAD });
+    expect(chain.sent).toHaveLength(0);
+    expect(r.outcome).toBe('declined');
+    expect((await quotes())[0]).toMatchObject({ outcome: 'declined', outcome_reason: 'spread_too_thin', quoted: true });
+  });
+
+  it('buys back toward target when the sell side is thin but the buy side beats the feed', async () => {
+    const rfq = new FakeRfq(); rfq.rate = 1361; // buying cNGN at 1361 ₦/$ vs feed 1330
+    const s = inBand({ limits: { ...state().limits, targetNgnBps: 6_000 } });
+    const chain = new FakeChain(s, [swappedLog(e6(27_220))]);
+    // Rate source 1500 puts the share at 50% (target 60%) but inside a 15% band, so rebalancing does nothing.
+    const r = await runOnce({ ...deps(chain, rfq), spread: SPREAD, bandBps: 1500 });
+    expect(r).toMatchObject({ outcome: 'filled', spread: true });
+    expect(rfq.reqs.map((q) => q.sellToken)).toEqual([CNGN, USDT]);
+    const qs = await quotes();
+    expect(qs.map((q) => q.outcome)).toEqual(['declined', 'filled']);
+  });
+
+  it('logs no_quote and does not trade when the exchange has no offer', async () => {
+    const rfq = new FakeRfq(); rfq.next = { quoted: false, reason: 'no_quote' } as never;
+    const chain = new FakeChain(inBand());
+    const r = await runOnce({ ...deps(chain, rfq), spread: SPREAD });
+    expect(chain.sent).toHaveLength(0);
+    expect(r.outcome).toBe('no_quote');
   });
 });

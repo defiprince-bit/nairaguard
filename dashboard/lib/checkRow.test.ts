@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkRange, checkTitle, isCheck, matchesFilter } from './format';
+import { checkRange, checkReason, checkTitle, isCheck, matchesFilter } from './format';
 import type { ActivityItem } from './types';
 
 // Shape of the agent's /activity item for a no-trade check (see agent/src/api.ts).
@@ -16,8 +16,10 @@ describe('no-trade check rows', () => {
   });
 
   it('titles: single, collapsed run, and RFQ outcome', () => {
-    expect(checkTitle(base)).toBe('Checked, no trade needed');
-    expect(checkTitle({ ...base, count: 4 })).toBe('Checked 4 times, no trade needed');
+    expect(checkTitle(base)).toBe('Checked, holding at target');
+    expect(checkTitle({ ...base, count: 4 })).toBe('Checked 4 times, holding at target');
+    expect(checkTitle({ ...base, reason: 'Rebalancing would move only $0.50.' })).toBe('Checked, no trade needed');
+    expect(checkReason(base.reason)).toBe('Naira share is 50%, target 50%. At your target — the agent will trade when the naira moves or a better rate appears.');
     expect(checkTitle({ ...base, outcome: 'no_quote', count: 2 })).toBe('Checked 2 times, no trade');
   });
 

@@ -12,7 +12,7 @@ import { DepositSheet, WithdrawSheet } from './MoneySheet';
 import { friendlyTx } from './ApprovalsList';
 import s from './Overview.module.css';
 import { REJECT_HELPER, sendApproveSwap, sendRejectSwap } from '../lib/approve';
-import { APPROVE_HELPER, approvalRate, approvalView, noRate, formatCountdown, lastCheck, msLeft, officialRateLine, pausedLine, tradeOut, txUrl, venueLine } from '../lib/format';
+import { APPROVE_HELPER, approvalRate, approvalView, checkReason, noRate, formatCountdown, lastCheck, msLeft, officialRateLine, pausedLine, tradeOut, txUrl, venueLine } from '../lib/format';
 import { loadOverview, type OverviewBalances } from '../lib/overview';
 import { type ApiLimits, overviewTestnet, pnlPct, presetFor, ringDash, signedMoney, splitAmount, usd18 } from '../lib/overviewView';
 import { shorten, useWallet } from '../lib/wallet';
@@ -356,7 +356,7 @@ export function Overview({ vault, owner, miniPay }: { vault: `0x${string}`; owne
                 return (
                   <a key={it.id} className={s.tr} href={it.txHash ? txUrl(it.txHash) : undefined} target="_blank" rel="noreferrer">
                     <div className={`${s.ic} ${v.up ? s.icUp : s.icDn}`} aria-hidden>{v.icon}</div>
-                    <div className={s.t}><b>{v.title}</b><span>{it.kind === 'swap' && it.status === 'confirmed' && venueLine(it.venue) ? `${venueLine(it.venue)} · ` : ''}{it.reason}</span></div>
+                    <div className={s.t}><b>{v.title}</b><span>{it.kind === 'swap' && it.status === 'confirmed' && venueLine(it.venue) ? `${venueLine(it.venue)} · ` : ''}{it.kind === 'check' ? checkReason(it.reason) : it.reason}</span></div>
                     <div className={`${s.amt} ${rej || unrated ? '' : v.up ? s.g : s.r}`}>
                       {rej ? 'You rejected this' : unrated ? 'Rate unavailable' : hidden ? '••' : `${v.atLeast ? '≥ ' : ''}${signedMoney(v.usd, 'USD')}`}
                       <span>{it.status === 'confirmed' || rej ? timeLabel(it.at) : it.status === 'pending' ? 'Pending' : 'Failed'}</span>

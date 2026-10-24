@@ -84,7 +84,13 @@ export function approvalRate(a: ApprovalItem): number | null {
 export type Filter = 'all' | 'executed' | 'pending' | 'failed';
 /** A "checked, no trade needed" line (kind 'check' without an RFQ outcome). */
 export const isNoTradeCheck = (item: ActivityItem) => item.kind === 'check' && !item.outcome;
-export const checkLine = (item: ActivityItem) => `Checked, no trade needed: ${item.reason}`;
+/** Friendlier text for an in-band check: old rows said "That's within the 5% band, so no trade." */
+export const AT_TARGET = 'At your target — the agent will trade when the naira moves or a better rate appears.';
+export function checkReason(reason: string | null | undefined): string {
+  const r = reason ?? '';
+  return r.replace(/That's within the \d+% band, so no trade\./, AT_TARGET);
+}
+export const checkLine = (item: ActivityItem) => `Checked, no trade needed: ${checkReason(item.reason)}`;
 /** Any agent check that didn't trade (in-band, below minimum, no quote, price moved). Never a swap row. */
 export const isCheck = (item: ActivityItem) => item.kind === 'check';
 
@@ -92,7 +98,8 @@ export const isCheck = (item: ActivityItem) => item.kind === 'check';
 export function checkTitle(item: ActivityItem): string {
   const n = item.count ?? 1;
   const times = n > 1 ? ` ${n} times` : '';
-  return item.outcome ? `Checked${times}, no trade` : `Checked${times}, no trade needed`;
+  if (item.outcome) return `Checked${times}, no trade`;
+  return item.reason && checkReason(item.reason).includes(AT_TARGET) ? `Checked${times}, holding at target` : `Checked${times}, no trade needed`;
 }
 
 const hm = (d: Date) => d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
