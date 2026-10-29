@@ -22,11 +22,21 @@ Sample transactions:
 
 | What | Tx |
 |---|---|
-| Agent rebalance fill via Textile (tagged `celo_9efd0f97b491` at the end of Input Data, view as UTF-8) | [`0x2c62d94b…fff2`](https://celoscan.io/tx/0x2c62d94b2fb6906ef8fd9477589304400b3a18f5bbbd090052dfb8ef0482fff2) |
+| Agent rebalance fill via Textile (MiniPay vault) (tagged `celo_9efd0f97b491` at the end of Input Data, view as UTF-8) | [`0x2c62d94b…fff2`](https://celoscan.io/tx/0x2c62d94b2fb6906ef8fd9477589304400b3a18f5bbbd090052dfb8ef0482fff2) |
 | VaultFactory deploy | [`0x8e8bbbe0…5c9c`](https://celoscan.io/tx/0x8e8bbbe02bc49a45716da4789ed6b618ad4203d0aa729b3158a6f04748e35c9c) |
 | VaultImplementation deploy | [`0x3cdacc04…eac7`](https://celoscan.io/tx/0x3cdacc04d7383fac78803df5653dc29388ee659478a257352fbffd4b9f2beac7) |
 | setVenue LimitOrderReactor | [`0x1717c8f3…9edd`](https://celoscan.io/tx/0x1717c8f3d80b28ed22941d14a3548574f9c8b8910695812793353c7b09e19edd) |
 | setVenue VaultOrderExecutor | [`0xc1b619e5…e3b8`](https://celoscan.io/tx/0xc1b619e5b342a6380c8c525d21fec158237aab025873be3e795f32dbb58ee3b8) |
+
+Oct 28 demo wallet proof (fresh wallet, end to end):
+
+| What | Link |
+|---|---|
+| Demo wallet | [`0x4991c2616e4124e127215EDd73d46f6EFb12CD09`](https://celoscan.io/address/0x4991c2616e4124e127215EDd73d46f6EFb12CD09) |
+| Vault | [`0x8B612Ccc4AA7574D943F3B8f7Cd90fD1aA784199`](https://celoscan.io/address/0x8B612Ccc4AA7574D943F3B8f7Cd90fD1aA784199) |
+| Create vault | [`0x8f5165a2…b12f`](https://celoscan.io/tx/0x8f5165a21b46eb9e5b6bddbc74b3dcc7db6bfec1a398050a828abb4c3fa8b12f) |
+| Deposit (tagged) | [`0x46815042…3cf8`](https://celoscan.io/tx/0x46815042ebd2216e631ca430fccc4fa7c33a278b6e23698dbec46ab21eb23cf8) |
+| Textile fill (tagged) | [`0xe0ae5dca…1230`](https://celoscan.io/tx/0xe0ae5dcae020d7243b82d6d824d87a76a40c38382b4c297db36aef5233381230) |
 
 ERC-8004 identity: [agent 9987](https://erc-8004.quicknode.com/agents/celo-mainnet/9987). Full deployment notes: [`docs/mainnet-deployment.md`](docs/mainnet-deployment.md).
 
