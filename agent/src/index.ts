@@ -10,6 +10,7 @@ import { listVaults, scanFactory, scanFlows } from './factory.js';
 import { MockRfqClient, type RfqClient, TextileRfqClient } from './rfq.js';
 import { FnRateSource } from './textile.js';
 import { spreadConfigFromEnv } from './strategy.js';
+import { readPrivateKey } from './privateKey.js';
 
 const INTERVAL_MS = Number(process.env.LOOP_INTERVAL_MS ?? 5 * 60_000);
 const ONCE = process.env.RUN_ONCE === '1';
@@ -20,8 +21,7 @@ async function main(): Promise<void> {
   }
   const addrs = ADDRESSES[NETWORK];
   if (!addrs) throw new Error(`No addresses configured for ${NETWORK}`);
-  const pk = process.env.AGENT_PRIVATE_KEY as `0x${string}` | undefined;
-  if (!pk) throw new Error('AGENT_PRIVATE_KEY is required');
+  const pk = readPrivateKey();
 
   const chain = NETWORK === 'celo' ? celo : celoSepolia;
   const publicClient = createPublicClient({ chain, transport: http(RPC_URL) });

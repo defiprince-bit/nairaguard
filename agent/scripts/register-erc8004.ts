@@ -12,6 +12,7 @@ import { celo } from 'viem/chains';
 import { ATTRIBUTION_TAG, NETWORK, RPC_URL } from '../src/config.js';
 import { agentCardUri, assertAgentUri, buildRegisterTx, IDENTITY_REGISTRY_MAINNET, identityRegistryAbi } from '../src/erc8004.js';
 import { assertTagged, createTxSender } from '../src/txBuilder.js';
+import { readPrivateKey } from '../src/privateKey.js';
 
 const AGENT = '0xA2A173A481BC063fEE0EF11c67Fc756DC5f928f4';
 const send = process.argv.includes('--send');
@@ -30,8 +31,7 @@ if (!send) process.exit(0);
 
 if (NETWORK !== 'celo' || process.env.ALLOW_MAINNET !== '1') throw new Error('--send needs NETWORK=celo and ALLOW_MAINNET=1 (owner approval)');
 if (!card) throw new Error('agent card must be live before registering');
-const pk = process.env.AGENT_PRIVATE_KEY as `0x${string}` | undefined;
-if (!pk) throw new Error('AGENT_PRIVATE_KEY required');
+const pk = readPrivateKey();
 const account = privateKeyToAccount(pk);
 if (account.address.toLowerCase() !== AGENT.toLowerCase()) throw new Error('must register from the agent wallet');
 
