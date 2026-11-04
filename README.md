@@ -1,9 +1,14 @@
-# nairaguard
-AI treasury agent on Celo that manages cNGN/USD₮ exposure, built for Agents on Open Rails.
+# NairaGuard
+
+AI treasury agent on Celo that manages cNGN/USD₮ exposure for Nigerian savers. Built for Agents on Open Rails.
+
+- **Live app:** https://nairaguard.space/app · **Landing:** https://nairaguard.space
+- **Network:** Celo mainnet (chain 42220) · **ERC-8004 agent:** [9987](https://erc-8004.quicknode.com/agents/celo-mainnet/9987)
+- **Stack:** Solidity/Foundry vault · Node 22 + TypeScript + viem agent · Next.js MiniPay mini app · Textile limit orders · Chainlink NGN/USD feed
 
 NairaGuard swaps between cNGN and USD₮ on Textile within on-chain limits the user sets, explains every trade in plain English, and runs as a MiniPay mini app.
 
-**Live demo:** https://nairaguard.space/app (landing + waitlist: https://nairaguard.space). Private, closed demo on Celo mainnet.
+Access to the live app is currently a closed beta on Celo mainnet.
 
 ## On-chain (Celo mainnet, chain 42220)
 
@@ -47,27 +52,21 @@ ERC-8004 identity: [agent 9987](https://erc-8004.quicknode.com/agents/celo-mainn
 | `contracts/` | Foundry project: treasury vault |
 | `agent/` | Node 22 + TypeScript + viem agent service |
 | `dashboard/` | Next.js mobile-first dashboard / MiniPay mini app |
-| `docs/` | Design spec (`design.md`, from the architecture lead) |
-| `.cursor/rules/` | Rules for Cursor |
+| `docs/` | Design spec (`design.md`) and deployment notes |
 
 ## Setup
 
 1. Node 22 (`nvm use`), pnpm 9 (`corepack enable`), and Foundry (`curl -L https://foundry.paradigm.xyz | bash && foundryup`).
 2. Install: `pnpm install`
-3. Hook the hackathon into Cursor (from the repo root, needs your own Loops House sign-in):
-   ```bash
-   npx loopshouse add agents-on-open-rails
-   ```
-   Choose Cursor when asked.
-4. Copy env templates and fill locally (never commit them):
+3. Copy env templates and fill locally (never commit them):
    `cp agent/.env.example agent/.env`, `cp dashboard/.env.example dashboard/.env.local`, `cp contracts/.env.example contracts/.env`
-5. Checks (agent tests run offline: no network, keys or env needed; they use in-memory PGlite):
+4. Checks (agent tests run offline: no network, keys or env needed; they use in-memory PGlite):
    ```bash
    pnpm test
    cd contracts && forge test && cd ..
    pnpm typecheck && pnpm lint && pnpm build
    ```
-6. Run: `pnpm --filter ./dashboard dev` and `pnpm --filter ./agent dev`.
+5. Run: `pnpm --filter ./dashboard dev` and `pnpm --filter ./agent dev`.
 
 ## Deploys
 
