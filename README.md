@@ -2,7 +2,8 @@
 
 AI treasury agent on Celo that manages cNGN/USD₮ exposure for Nigerian savers. Built for Agents on Open Rails.
 
-- **Live app:** https://nairaguard.space/app · **Landing:** https://nairaguard.space
+- **Live app:** https://nairaguard-vert.vercel.app/app · **Landing:** https://nairaguard-vert.vercel.app
+- Official domain [nairaguard.space](https://nairaguard.space) is restoring after registrar verification; use the Vercel demo links above until it is back.
 - **Network:** Celo mainnet (chain 42220) · **ERC-8004 agent:** [9987](https://erc-8004.quicknode.com/agents/celo-mainnet/9987)
 - **Stack:** Solidity/Foundry vault · Node 22 + TypeScript + viem agent · Next.js MiniPay mini app · Textile limit orders · Chainlink NGN/USD feed
 
