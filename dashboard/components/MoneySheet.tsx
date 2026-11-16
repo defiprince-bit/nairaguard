@@ -5,7 +5,7 @@ import { Button } from './Button';
 import { InlineMessage } from './InlineMessage';
 import { type FriendlyError, friendlyError } from '../lib/errors';
 import { DepositStep } from './CreateVault';
-import { readVaultBalances, sendWithdraw, type VaultTokenBalance } from '../lib/withdraw';
+import { parseRecipient, readVaultBalances, sendWithdraw, shortAddr, type VaultTokenBalance } from '../lib/withdraw';
 import s from './Overview.module.css';
 
 function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
@@ -42,11 +42,15 @@ export function WithdrawSheet(p: { owner: `0x${string}`; factory: `0x${string}`;
       .catch(() => setHeld(null));
   }, [p.factory, p.vault]);
   const avail = held?.[token];
+  const [recipient, setRecipient] = useState('');
+  let dest: `0x${string}` | null = p.owner;
+  try { dest = parseRecipient(recipient, p.owner); } catch { dest = null; }
+  const other = dest !== null && dest.toLowerCase() !== p.owner.toLowerCase();
   async function go() {
     setBusy(true);
     setError(null);
     try {
-      await sendWithdraw(p.owner, p.factory, p.vault, token, amount.trim());
+      await sendWithdraw(p.owner, p.factory, p.vault, token, amount.trim(), recipient);
       p.onDone();
     } catch (e) {
       setError(friendlyError(e));
@@ -70,8 +74,15 @@ export function WithdrawSheet(p: { owner: `0x${string}`; factory: `0x${string}`;
           ) : null}
         </div>
         <input id="wd-amt" inputMode="decimal" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className={s.input} />
+        <label className={s.lbl} htmlFor="wd-to">Send to a different address (optional)</label>
+        <input id="wd-to" placeholder={`Your wallet ${shortAddr(p.owner)}`} value={recipient} onChange={(e) => setRecipient(e.target.value)} className={s.input} autoComplete="off" spellCheck={false} />
+        {dest === null ? (
+          <p className={s.lbl} role="alert">Enter a valid 0x wallet address (42 characters) or leave it blank.</p>
+        ) : (
+          <p className={s.lbl}>{other ? `Sending to ${shortAddr(dest)}` : `Sending to your wallet ${shortAddr(dest)}`}</p>
+        )}
         {error ? <InlineMessage err={error} onDismiss={() => setError(null)} /> : null}
-        <Button fullWidth onClick={go} disabled={busy || !amount}>{busy ? 'Waiting for wallet…' : 'Withdraw'}</Button>
+        <Button fullWidth onClick={go} disabled={busy || !amount || dest === null}>{busy ? 'Waiting for wallet…' : 'Withdraw'}</Button>
       </div>
     </Sheet>
   );

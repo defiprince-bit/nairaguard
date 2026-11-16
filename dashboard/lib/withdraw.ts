@@ -1,4 +1,4 @@
-import { encodeFunctionData, formatUnits, parseAbi, parseUnits } from 'viem';
+import { encodeFunctionData, formatUnits, getAddress, isAddress, parseAbi, parseUnits } from 'viem';
 import { CHAIN } from './overview';
 import { factoryTokens, tag, waitForReceipt } from './vault';
 import { sendTagged } from './sendTagged';
@@ -10,6 +10,24 @@ export const vaultWithdrawAbi = parseAbi(['function withdraw(address token, uint
 /** Vault.withdraw(token, amount, to) with the ERC-8021 attribution suffix. */
 export function buildWithdraw(vault: `0x${string}`, token: `0x${string}`, amount: bigint, to: `0x${string}`) {
   return { to: vault, data: tag(encodeFunctionData({ abi: vaultWithdrawAbi, functionName: 'withdraw', args: [token, amount, to] })) };
+}
+
+/**
+ * Optional withdraw recipient. Blank → the connected wallet. Otherwise a valid 0x address
+ * (all-lowercase or correctly checksummed mixed case), returned checksummed.
+ */
+export function parseRecipient(input: string, owner: `0x${string}`): `0x${string}` {
+  const v = input.trim();
+  if (!v) return owner;
+  if (!isAddress(v, { strict: true })) throw new Error('Enter a valid 0x wallet address (42 characters) or leave it blank.');
+  const a = getAddress(v);
+  if (/^0x0{40}$/i.test(a)) throw new Error('Enter a valid 0x wallet address (42 characters) or leave it blank.');
+  return a;
+}
+
+/** "0x4991…CD09" for confirmation lines. */
+export function shortAddr(a: string): string {
+  return `${a.slice(0, 6)}…${a.slice(-4)}`;
 }
 
 const decAbi = parseAbi(['function decimals() view returns (uint8)', 'function balanceOf(address) view returns (uint256)']);
@@ -33,7 +51,8 @@ export async function readVaultBalances(factory: `0x${string}`, vault: `0x${stri
   return { cngn, usdt };
 }
 
-export async function sendWithdraw(owner: `0x${string}`, factory: `0x${string}`, vault: `0x${string}`, which: 'cngn' | 'usdt', amount: string) {
+export async function sendWithdraw(owner: `0x${string}`, factory: `0x${string}`, vault: `0x${string}`, which: 'cngn' | 'usdt', amount: string, recipient = '') {
+  const to = parseRecipient(recipient, owner);
   const eth = getProvider();
   if (!eth) throw new Error('No wallet found.');
   const tokens = await factoryTokens(eth, factory);
@@ -48,7 +67,7 @@ export async function sendWithdraw(owner: `0x${string}`, factory: `0x${string}`,
     const sym = which === 'cngn' ? 'cNGN' : 'USD₮';
     throw new Error(`Your vault holds ${formatUnits(held, decimals)} ${sym}. Enter that or less (the balance at the top is cNGN and USD₮ added together).`);
   }
-  const hash = await sendTagged(eth, owner, buildWithdraw(vault, token, units, owner));
+  const hash = await sendTagged(eth, owner, buildWithdraw(vault, token, units, to));
   const rc = await waitForReceipt(eth, hash);
   if (rc.status !== '0x1') throw new Error('Withdrawal failed on-chain.');
   return hash;
