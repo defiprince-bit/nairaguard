@@ -1,11 +1,11 @@
 'use client';
 
-import { ReactNode, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { Button } from './Button';
 import { InlineMessage } from './InlineMessage';
 import { type FriendlyError, friendlyError } from '../lib/errors';
 import { DepositStep } from './CreateVault';
-import { sendWithdraw } from '../lib/withdraw';
+import { readVaultBalances, sendWithdraw, type VaultTokenBalance } from '../lib/withdraw';
 import s from './Overview.module.css';
 
 function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
@@ -35,6 +35,13 @@ export function WithdrawSheet(p: { owner: `0x${string}`; factory: `0x${string}`;
   const [amount, setAmount] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<FriendlyError | null>(null);
+  const [held, setHeld] = useState<Record<'cngn' | 'usdt', VaultTokenBalance> | null>(null);
+  useEffect(() => {
+    readVaultBalances(p.factory, p.vault)
+      .then((b) => { setHeld(b); if (b.cngn.raw === 0n && b.usdt.raw > 0n) setToken('usdt'); })
+      .catch(() => setHeld(null));
+  }, [p.factory, p.vault]);
+  const avail = held?.[token];
   async function go() {
     setBusy(true);
     setError(null);
@@ -54,7 +61,14 @@ export function WithdrawSheet(p: { owner: `0x${string}`; factory: `0x${string}`;
           <Button variant={token === 'cngn' ? 'primary' : 'secondary'} onClick={() => setToken('cngn')}>cNGN</Button>
           <Button variant={token === 'usdt' ? 'primary' : 'secondary'} onClick={() => setToken('usdt')}>USD₮</Button>
         </div>
-        <label className={s.lbl} htmlFor="wd-amt">Amount</label>
+        <div className={s.row}>
+          <label className={s.lbl} htmlFor="wd-amt">Amount</label>
+          {avail ? (
+            <button type="button" className={s.eye} onClick={() => setAmount(avail.display)} disabled={avail.raw === 0n}>
+              Max {avail.display} {token === 'cngn' ? 'cNGN' : 'USD₮'}
+            </button>
+          ) : null}
+        </div>
         <input id="wd-amt" inputMode="decimal" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className={s.input} />
         {error ? <InlineMessage err={error} onDismiss={() => setError(null)} /> : null}
         <Button fullWidth onClick={go} disabled={busy || !amount}>{busy ? 'Waiting for wallet…' : 'Withdraw'}</Button>
